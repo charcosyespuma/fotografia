@@ -35,6 +35,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .search{display:flex;gap:8px}
 .search input{flex:1;min-width:0;font:inherit;color:var(--text);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .search .go{background:var(--acc);color:#0a0f22;font-weight:700;border-radius:14px;padding:0 16px}
+.geobig{width:100%;margin-top:10px;padding:12px;border-radius:14px;background:rgba(143,179,255,.14);border:1px solid rgba(143,179,255,.35);color:var(--text);font-weight:700}
 #results{list-style:none;margin:8px 0 0;padding:0}
 #results li{padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.05);margin:6px 0;cursor:pointer}
 #map{height:58vh;min-height:320px;border-radius:16px;margin-top:12px;background:#0b0f1d}
@@ -163,9 +164,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
       <input id="q" placeholder="Lugar o coordenadas" autocomplete="off" enterkeyhint="search">
       <button class="go" id="go">Buscar</button>
     </div>
+    <button id="geobig" class="geobig">📍 Usar mi ubicación</button>
     <ul id="results"></ul>
     <div id="map"></div>
-    <div class="hint">Toca el mapa para elegir un punto exacto · <button id="geo" style="color:var(--acc);font-size:12px">usar mi ubicación</button></div>
+    <div class="hint">Toca el mapa para elegir un punto exacto <button id="geo" class="hidden"></button></div>
   </section>
 
   <!-- Ajustes -->
@@ -387,12 +389,14 @@ const GEO_HELP=`<li style="cursor:default;line-height:1.5"><b>📍 El móvil no 
   1. Toca tu sitio en el mapa.<br>
   2. En Google Maps, toca el punto azul de tu ubicación, copia las coordenadas (p. ej. <i>28.0312, -15.6953</i>) y pégalas en el buscador.<br>
   3. Para que funcione este botón, sube la app a una web (por ejemplo tiiny.host).</span></li>`;
+$('geobig').onclick=()=>$('geo').click();
 $('geo').onclick=()=>{
   if(!window.isSecureContext||!navigator.geolocation){$('results').innerHTML=GEO_HELP;return;}
   $('results').innerHTML='<li style="cursor:default;color:var(--mute)">Buscando tu posición…</li>';
   navigator.geolocation.getCurrentPosition(async p=>{const lat=+p.coords.latitude.toFixed(4),lng=+p.coords.longitude.toFixed(4);
     $('results').innerHTML='';if(map){map.setView([lat,lng],12);setMarker(lat,lng);}setPlace({name:await placeName(lat,lng),lat,lng});},
-    ()=>{$('results').innerHTML=GEO_HELP;},{enableHighAccuracy:true,timeout:15000});};
+    err=>{$('results').innerHTML=err&&err.code===1?`<li style="cursor:default;line-height:1.5"><b>📍 Permiso de ubicación denegado</b><br><span style="color:var(--mute)">Toca el candado 🔒 junto a la dirección (o ⋮ → Información del sitio) → Permisos → Ubicación → Permitir. Comprueba también que la ubicación del móvil está activada.</span></li>`
+      :`<li style="cursor:default;line-height:1.5"><b>📍 No se pudo obtener tu posición</b><br><span style="color:var(--mute)">Activa la ubicación del móvil e inténtalo de nuevo, o toca tu sitio en el mapa.</span></li>`;},{enableHighAccuracy:true,timeout:15000});};
 $('locbtn').onclick=()=>{showPicker($('picker').classList.contains('hidden'));$('settings').classList.add('hidden');};
 $('setbtn').onclick=()=>{$('settings').classList.toggle('hidden');};
 
@@ -712,7 +716,7 @@ function findPasses(t,t0,t1){
 /* ===== Inicio ===== */
 paintMode();paintSats();paintFavs();setRed(load('red',false));
 if(place){$('locname').textContent=place.name;showPicker(false);fetchWeather();}
-else{showPicker(true);$('app').innerHTML='<div class="card empty"><div class="big">🔭</div><p><b>Elige dónde vas a fotografiar</b></p><p class="note">Busca un lugar o toca un punto del mapa y te diré si merece la pena salir esta noche.</p></div>';}
+else{showPicker(true);$('app').innerHTML='<div class="card empty"><div class="big">🔭</div><p><b>Elige dónde vas a fotografiar</b></p><p class="note">Busca un lugar, toca un punto del mapa o usa tu ubicación, y te diré si merece la pena salir esta noche.</p></div>';}
 </script>
 </body>
 </html>
