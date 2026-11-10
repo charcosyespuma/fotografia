@@ -100,6 +100,12 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .toggle{width:48px;height:28px;border-radius:14px;background:rgba(255,255,255,.12);position:relative}
 .toggle::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.2s}
 .toggle.on{background:var(--good)}.toggle.on::after{left:23px}
+.favrow{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.06);margin:4px 0}
+.favrow .fname{flex:1;font-size:14px}
+.favrow button{font-size:15px;padding:2px 6px}
+.favrow button[data-fd]{color:var(--bad)}
+.fedit{flex:1;min-width:0;font:inherit;color:var(--text);background:rgba(0,0,0,.3);border:1px solid var(--acc);border-radius:8px;padding:6px 8px}
+.fok{background:var(--good)!important;color:#04150d!important;border-radius:8px;font-weight:800;padding:6px 12px!important}
 .satchip{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:6px 10px;border-radius:12px;background:rgba(255,255,255,.06);margin:3px}
 .satchip button{color:var(--bad)}
 .addsat{display:flex;gap:8px;margin-top:8px}
@@ -170,8 +176,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="sub">⭐ Mis sitios</div>
     <div id="favlist"><span class="note">Aún no has guardado ninguno. Elige un lugar y toca ☆ arriba.</span></div>
     <div class="sub">🔔 Avisos al móvil</div>
-    <div class="note">1. Instala la app gratuita <b>ntfy</b> (Play Store).<br>2. En ntfy pulsa <b>+</b> y suscríbete a este tema:</div>
-    <div class="addsat"><input id="topic" readonly><button id="copytopic">Copiar</button></div>
+    <div class="note">1. Instala la app gratuita <b>ntfy</b> (Play Store).<br>2. En ntfy pulsa <b>+</b> y suscríbete a este tema (si ya tenías uno, puedes pegarlo aquí):</div>
+    <div class="addsat"><input id="topic" spellcheck="false" autocapitalize="off"><button id="copytopic">Copiar</button></div>
     <div class="note" style="margin-top:8px">3. Avisarme cuando la noche llegue a:</div>
     <div class="seg" id="umbral" style="margin-top:6px"><button data-u="60">60</button><button data-u="70">70</button><button data-u="80">80</button></div>
     <div class="addsat"><button id="testntfy" style="flex:1;padding:10px">📨 Probar aviso</button></div>
@@ -394,7 +400,7 @@ function paintFavBtn(){const on=favs.some(f=>same(f,place));$('favbtn').textCont
 function paintFavs(){
   paintFavBtn();
   $('favchips').innerHTML=favs.map((f,i)=>`<button class="chip" data-fi="${i}">⭐ ${esc(f.name)}</button>`).join('');
-  $('favlist').innerHTML=favs.length?favs.map((f,i)=>`<span class="satchip">⭐ ${esc(f.name)}<button data-fd="${i}">✕</button></span>`).join(''):'<span class="note">Aún no has guardado ninguno. Elige un lugar y toca ☆ arriba.</span>';
+  $('favlist').innerHTML=favs.length?favs.map((f,i)=>`<div class="favrow" data-i="${i}"><span class="fname">⭐ ${esc(f.name)}</span><button data-fe="${i}" title="Cambiar nombre">✏️</button><button data-fd="${i}" title="Borrar">✕</button></div>`).join(''):'<span class="note">Aún no has guardado ninguno. Elige un lugar y toca ☆ arriba.</span>';
   if(favLayer){favLayer.clearLayers();favs.forEach(f=>{L.circleMarker([f.lat,f.lng],{radius:7,color:'#000',weight:1.5,fillColor:'#ffd24a',fillOpacity:1})
     .bindTooltip(esc(f.name),{permanent:true,direction:'top',offset:[0,-8],className:'favtip'}).on('click',ev=>{L.DomEvent.stop(ev);pick(f);}).addTo(favLayer);});}
   paintCfg();
@@ -403,7 +409,18 @@ $('favbtn').onclick=()=>{if(!place)return;const i=favs.findIndex(f=>same(f,place
   if(i>=0)favs.splice(i,1);else favs.push({name:place.name,lat:place.lat,lng:place.lng});
   save('favs',favs);paintFavs();if(wx)render();};
 $('favchips').onclick=e=>{const i=e.target.closest('[data-fi]')?.dataset.fi;if(i!=null)pick(favs[+i]);};
-$('favlist').onclick=e=>{const i=e.target.dataset?.fd;if(i==null)return;favs.splice(+i,1);save('favs',favs);paintFavs();if(wx)render();};
+$('favlist').onclick=e=>{const d=e.target.dataset||{};
+  if(d.fd!=null){if(!confirmDel(e.target))return;favs.splice(+d.fd,1);save('favs',favs);paintFavs();if(wx)render();return;}
+  if(d.fe!=null){const i=+d.fe,row=e.target.closest('.favrow');
+    row.innerHTML=`<input class="fedit" value="${esc(favs[i].name)}" maxlength="40"><button class="fok">✓</button>`;
+    const inp=row.querySelector('input');inp.focus();inp.select();
+    const ok=()=>{const v=inp.value.trim();if(v){const old=favs[i];if(same(old,place)){place.name=v;save('place',place);$('locname').textContent=v;}
+        old.name=v;save('favs',favs);}paintFavs();if(wx)render();if(mView)renderMonth();};
+    row.querySelector('.fok').onclick=ok;inp.onkeydown=ev=>{if(ev.key==='Enter')ok();if(ev.key==='Escape')paintFavs();};}
+};
+/* Borrar pide un segundo toque para evitar sustos */
+function confirmDel(btn){if(btn.dataset.sure)return true;btn.dataset.sure=1;btn.textContent='¿Borrar?';btn.style.color='#fff';btn.style.background='var(--bad)';btn.style.borderRadius='8px';btn.style.padding='2px 8px';
+  setTimeout(()=>{if(btn.isConnected){delete btn.dataset.sure;btn.textContent='✕';btn.removeAttribute('style');}},3000);return false;}
 /* Tarjeta: esta noche en todos tus sitios */
 const favCache={};
 async function favNights(f){const k=f.lat+','+f.lng+','+mode,c=favCache[k];
@@ -430,6 +447,7 @@ function paintCfg(){
 $('umbral').onclick=e=>{const u=e.target.closest('button')?.dataset.u;if(!u)return;umbral=+u;save('umbral',umbral);paintCfg();};
 async function copyText(id){const el=$(id);el.select();try{await navigator.clipboard.writeText(el.value);}catch(_){try{document.execCommand('copy');}catch(__){}}}
 $('copytopic').onclick=()=>copyText('topic');
+$('topic').onchange=()=>{const v=$('topic').value.trim();if(/^[A-Za-z0-9_-]{6,64}$/.test(v)){topic=v;save('topic',v);}paintCfg();};
 $('copycfg').onclick=()=>{copyText('cfg');$('copycfg').textContent='✓ Copiada';setTimeout(()=>$('copycfg').textContent='Copiar configuración',2000);};
 $('testntfy').onclick=async()=>{
   $('ntfymsg').textContent='Enviando…';
