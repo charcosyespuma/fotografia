@@ -213,7 +213,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="sub">🛰️ Satélites que se calculan</div>
     <div id="satlist"></div>
     <div class="addsat"><input id="norad" inputmode="numeric" placeholder="Nº NORAD (ej. 25544)"><button id="addsat">Añadir</button></div>
-    <div class="note" style="margin-top:12px">Versión 2026-11-10g · cuentas · atardeceres y tormentas<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
+    <div class="note" style="margin-top:12px">Versión 2026-11-10h · cuentas · atardeceres y tormentas<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
   </section>
 
   <section class="card hidden" id="auth">
@@ -567,30 +567,31 @@ $('testntfy').onclick=async()=>{
 let mView=false,mPlace=null,mOffset=0,mSel=null,mTarget=load('mtarget','all');
 const MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const climCache={};
-function climKey(pl,y,m){return `clim_${pl.lat.toFixed(2)}_${pl.lng.toFixed(2)}_${m}_${y}`;}
+function climKey(pl,y,m){return `clim2_${pl.lat.toFixed(2)}_${pl.lng.toFixed(2)}_${m}_${y}`;}
 /* Para cada día del mes: % de noches buenas (por meteorología) en los 10 años anteriores, ventana de ±3 días */
 async function climatology(pl,year,month,progress){
   const k=climKey(pl,year,month);if(climCache[k])return climCache[k];
   const stored=load(k,null);if(stored)return climCache[k]=stored;
-  const vars='cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,relative_humidity_2m,dew_point_2m,temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation';
+  const vars='cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_gusts_10m,precipitation';
   const years=[];for(let y=year-10;y<year;y++)years.push(y);
   const iso=d=>d.toISOString().slice(0,10);
-  let done=0;const nightScore={};let off=0;
+  let done=0;const nightScore={},okYears=new Set();let off=0;
   await Promise.all(years.map(async y=>{
     const st=new Date(Date.UTC(y,month,1-4)),en=new Date(Date.UTC(y,month+1,0+4));
     try{const j=await (await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${pl.lat}&longitude=${pl.lng}&start_date=${iso(st)}&end_date=${iso(en)}&hourly=${vars}&timezone=auto&timeformat=unixtime`)).json();
       const H=j.hourly;if(!H)return;off=j.utc_offset_seconds||0;const g={};
       for(let i=0;i<H.time.length;i++){const ms=H.time[i]*1000,salt=sunAlt(ms,pl.lat,pl.lng);if(salt>-12)continue;
         const h={salt,malt:-90,illum:0,low:H.cloud_cover_low[i]??0,mid:H.cloud_cover_mid[i]??0,high:H.cloud_cover_high[i]??0,
-          rh:H.relative_humidity_2m[i]??0,td:H.dew_point_2m[i]??0,t:H.temperature_2m[i]??0,wind:H.wind_speed_10m[i]??0,gust:H.wind_gusts_10m[i]??0,
+          rh:50,td:-20,t:10,wind:H.wind_speed_10m[i]??0,gust:H.wind_gusts_10m[i]??0,   /* sin humedad: en la rejilla de 25 km exagera la niebla del sitio */
           vis:null,pp:(H.precipitation[i]??0)>0.2?100:0,dust:null,aod:null};
         const key=new Date(ms+off*1000-12*3600e3).toISOString().slice(0,10);(g[key]=g[key]||[]).push(hourScore(h,'land'));}
       for(const [key,ss] of Object.entries(g)){if(ss.length<3)continue;let b=0;for(let i=0;i<ss.length-1;i++)b=Math.max(b,(ss[i]+ss[i+1])/2);nightScore[key]=b;}
+      okYears.add(y);
     }catch(_){}
     done++;progress&&progress(done,years.length);
   }));
   const days=new Date(Date.UTC(year,month+1,0)).getUTCDate(),out={off,years:0,p:[],avg:[]};
-  const ys=new Set(Object.keys(nightScore).map(k=>k.slice(0,4)));out.years=ys.size;
+  out.years=okYears.size;
   for(let d=1;d<=days;d++){let n=0,good=0,sum=0;
     for(const y of years)for(let k=-3;k<=3;k++){const key=new Date(Date.UTC(y,month,d+k)).toISOString().slice(0,10);
       if(nightScore[key]!=null){n++;sum+=nightScore[key];if(nightScore[key]>=70)good++;}}
@@ -613,7 +614,7 @@ function nightAstro(pl,y,m,d,off){
   return{dark,free,bs,be,illum:illum.fraction,phase:illum.phase,mw,
     summer:Math.max(mw.core.h,mw.cyg.h*0.6),winter:mw.win.h};
 }
-const chanceCol=c=>c==null?'rgba(255,255,255,.04)':c>=.6?'rgba(63,214,154,.55)':c>=.4?'rgba(240,198,74,.5)':c>=.2?'rgba(240,140,60,.45)':'rgba(255,107,87,.3)';
+const chanceCol=c=>c==null?'rgba(255,255,255,.04)':c>=.5?'rgba(63,214,154,.55)':c>=.35?'rgba(240,198,74,.5)':c>=.2?'rgba(240,140,60,.45)':'rgba(255,107,87,.3)';
 async function renderMonth(){
   const box=$('monthview');
   const places=favs.length?favs:(place?[place]:[]);
@@ -641,14 +642,15 @@ async function renderMonth(){
   const top=info.filter(x=>!x.past&&x.chance!=null).sort((a,b)=>b.chance-a.chance||(mTarget==='summer'?b.a.summer-a.a.summer:mTarget==='winter'?b.a.winter-a.a.winter:b.a.free-a.a.free)).slice(0,5);
   const wd=(d)=>new Date(Date.UTC(y,m,d,12)).toLocaleDateString('es-ES',{weekday:'short',day:'numeric',timeZone:'UTC'});
   box.innerHTML=head+cal+`
-    <div class="scale"><span><i style="background:rgba(63,214,154,.8)"></i>muy probable</span><span><i style="background:rgba(240,198,74,.8)"></i>posible</span><span><i style="background:rgba(240,140,60,.8)"></i>difícil</span><span><i style="background:rgba(255,107,87,.6)"></i>poco probable</span></div>
+    <div class="scale"><span><i style="background:rgba(63,214,154,.8)"></i>50% o más</span><span><i style="background:rgba(240,198,74,.8)"></i>35–50%</span><span><i style="background:rgba(240,140,60,.8)"></i>20–35%</span><span><i style="background:rgba(255,107,87,.6)"></i>menos de 20%</span></div>
     <div class="mdetail" id="mdetail">Toca un día para ver el detalle.</div></section>
     <section class="card"><h3>🏆 Mejores noches de ${MONTHS[m]}</h3>
+    <div class="note" style="margin:-4px 0 6px">En ${MONTHS[m]}, de media, ${Math.round(cl.p.filter(x=>x!=null).reduce((a,b)=>a+b,0)/Math.max(1,cl.p.filter(x=>x!=null).length)*100)}% de las noches suelen ser buenas en este sitio (sin contar la Luna).</div>
     ${top.length?top.map(x=>`<div class="row" data-d="${x.d}" style="cursor:pointer"><div class="ic">${moonEmoji(x.a.phase)}</div><div class="tx"><b>${wd(x.d)}</b>
       <span>${Math.round(x.p*100)}% despejadas en otros años · ${mTarget==='summer'?`V.L. verano ${x.a.summer.toFixed(1)} h sin luna`:mTarget==='winter'?`V.L. invierno ${x.a.winter.toFixed(1)} h sin luna`:x.a.free>=0.5?`sin luna ${fmt(x.a.bs)}–${fmt(x.a.be)}`:'con luna toda la noche'}</span></div>
       <span class="badge" style="background:${chanceCol(x.chance)};color:#fff">${Math.round(x.chance*100)}%</span></div>`).join(''):'<div class="note">No quedan noches este mes.</div>'}
     </section>
-    <section class="card"><div class="note">El porcentaje combina cuántas de estas mismas fechas tuvieron cielo bueno en ${cl.years} de los últimos 10 años (nubes, humedad, viento y lluvia; ±3 días) ${mTarget==='all'?(mode==='deep'?'con las horas de noche cerrada sin Luna de este año (hacen falta 3 h para puntuar al 100 %)':'(modo paisaje: la Luna no cuenta)'):'con las horas en que esa Vía Láctea está alta, con noche cerrada y sin Luna (hacen falta 2 h para puntuar al 100 %)'}. Es estadística, no una previsión: sirve para planificar; la previsión real de cada noche aparece 7 días antes. Datos históricos: ERA5 (Open-Meteo), resolución ~25 km; no siempre recoge bien el mar de nubes en cumbres.</div></section>`;
+    <section class="card"><div class="note">El porcentaje combina cuántas de estas mismas fechas tuvieron cielo bueno en ${cl.years} de los últimos 10 años (nubes, viento y lluvia; ±3 días) ${mTarget==='all'?(mode==='deep'?'con las horas de noche cerrada sin Luna de este año (hacen falta 3 h para puntuar al 100 %)':'(modo paisaje: la Luna no cuenta)'):'con las horas en que esa Vía Láctea está alta, con noche cerrada y sin Luna (hacen falta 2 h para puntuar al 100 %)'}. Es estadística, no una previsión: sirve para planificar; la previsión real de cada noche aparece 7 días antes. Datos históricos: ERA5 (Open-Meteo), resolución ~25 km; no siempre recoge bien el mar de nubes en cumbres.</div></section>`;
   bindMonthNav(places);
   const show=d=>{const x=info[d-1],a=x.a;mSel=d;
     box.querySelectorAll('.cal .d').forEach(b=>b.classList.toggle('on',+b.dataset.d===d));
