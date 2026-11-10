@@ -1,6 +1,8 @@
-// El Tiempo Esta Noche · aviso diario por ntfy
-// Lo ejecuta GitHub Actions cada tarde. Lee sitios.json y envía una notificación
-// si alguno de tus sitios tiene buena noche. El cálculo es el mismo que el de la app.
+// El Tiempo Esta Noche · avisos diarios por ntfy
+// GitHub Actions lo ejecuta dos veces al día:
+//   mañana (08:00 UTC): atardecer de hoy y tormentas del día
+//   tarde  (17:00 UTC): noche de hoy, amanecer de mañana y tormentas de la noche
+// Lee sitios.json (lo mantiene la app) y usa el mismo cálculo que la app.
 import fs from 'node:fs';
 
 /* CORE-START */
@@ -57,7 +59,7 @@ function calima(n){if(n.dust==null)return{t:'—',l:'sin datos',bad:0};
   return v<25?{t:'No',l:'sin calima',bad:0}:v<60?{t:'Leve',l:'calima',bad:1}:v<120?{t:'Mod.',l:'calima',bad:2}:{t:'Fuerte',l:'calima',bad:3};}
 
 /* Previsión de un lugar: meteorología (8 días) + calima (5 días) */
-const WX_VARS='cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,relative_humidity_2m,dew_point_2m,temperature_2m,wind_speed_10m,wind_gusts_10m,visibility,precipitation_probability';
+const WX_VARS='weather_code,cape,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,relative_humidity_2m,dew_point_2m,temperature_2m,wind_speed_10m,wind_gusts_10m,visibility,precipitation_probability';
 async function getForecast(pl){
   const aqP=fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${pl.lat}&longitude=${pl.lng}&hourly=dust,aerosol_optical_depth&forecast_days=5&timezone=auto&timeformat=unixtime`).then(r=>r.json()).catch(()=>null);
   const wx=await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${pl.lat}&longitude=${pl.lng}&hourly=${WX_VARS}&forecast_days=8&timezone=auto&timeformat=unixtime`)).json();
@@ -77,7 +79,7 @@ function nightsFor(pl,wx,aqIdx,mode){
       low:H.cloud_cover_low[i]??0,mid:H.cloud_cover_mid[i]??0,high:H.cloud_cover_high[i]??0,total:H.cloud_cover[i]??0,
       rh:H.relative_humidity_2m[i]??0,td:H.dew_point_2m[i]??0,t:H.temperature_2m[i]??0,wind:H.wind_speed_10m[i]??0,
       gust:H.wind_gusts_10m[i]??0,vis:H.visibility?H.visibility[i]:null,pp:H.precipitation_probability[i]??0,
-      dust:aqIdx[H.time[i]]?.dust??null,aod:aqIdx[H.time[i]]?.aod??null};
+      dust:aqIdx[H.time[i]]?.dust??null,aod:aqIdx[H.time[i]]?.aod??null,code:H.weather_code?.[i]??0,cape:H.cape?.[i]??0};
     h.s=hourScore(h,mode);(g[key]=g[key]||[]).push(h);
   }
   return Object.entries(g).filter(([,hs])=>hs.length>=3).slice(0,7).map(([key,hs])=>{
@@ -87,42 +89,105 @@ function nightsFor(pl,wx,aqIdx,mode){
       cloud:wavg('total'),wind:wavg('wind'),rh:wavg('rh'),pp:Math.max(...hs.map(h=>h.pp)),
       illum:hs[Math.floor(hs.length/2)].illum,phase:hs[Math.floor(hs.length/2)].phase,moonUp:hs.filter(h=>h.malt>0).length,
       fog:w.some(h=>h.t-h.td<2),dust:w[0].dust==null?null:Math.round(Math.max(...w.map(h=>h.dust??0))),aod:w[0].aod==null?null:Math.max(...w.map(h=>h.aod??0)),
-      tmin:Math.min(...hs.map(h=>h.t)),gust:Math.max(...hs.map(h=>h.gust))};
+      tmin:Math.min(...hs.map(h=>h.t)),gust:Math.max(...hs.map(h=>h.gust)),storm:stormInfo(hs)};
   });
 }
+/* Tormentas: código meteorológico 95-99 = tormenta prevista; CAPE alta + lluvia probable = posible */
+function stormLevel(h){return h.code>=96?3:h.code>=95?2:(h.cape>=800&&h.pp>=30)||(h.cape>=1500)?1:0;}
+function stormInfo(hs){const st=hs.filter(h=>stormLevel(h)>0);if(!st.length)return null;
+  return{level:Math.max(...st.map(stormLevel)),start:st[0].ms,end:st[st.length-1].ms+3600e3,hours:st.length,cape:Math.max(...st.map(h=>h.cape))};}
+function sunAz(ms,lat,lng){const d=toDays(ms),c=sunCoords(d),phi=lat*rad,H=sidereal(d,rad*-lng)-c.ra;
+  return(Math.atan2(Math.sin(H),Math.cos(H)*Math.sin(phi)-Math.tan(c.dec)*Math.cos(phi))/rad+180+360)%360;}
+/* Momento en que el Sol cruza una altura, buscando minuto a minuto */
+function sunCross(pl,t0,t1,alt,up){let prev=sunAlt(t0,pl.lat,pl.lng);
+  for(let t=t0+60e3;t<=t1;t+=60e3){const a=sunAlt(t,pl.lat,pl.lng);if(up?(prev<alt&&a>=alt):(prev>alt&&a<=alt))return t;prev=a;}return null;}
+/* Atardecer (tarde del día key) y amanecer (mañana siguiente), con hora dorada y azul */
+function sunEvents(pl,key,off){const noon=Date.parse(key+'T12:00:00Z')-off*1000;
+  const set={gold:sunCross(pl,noon,noon+12*3600e3,6,false),sun:sunCross(pl,noon,noon+12*3600e3,-0.833,false),
+    blue:sunCross(pl,noon,noon+12*3600e3,-4,false),blueEnd:sunCross(pl,noon,noon+12*3600e3,-6,false)};
+  const m0=noon+12*3600e3,m1=noon+24*3600e3;
+  const rise={blue:sunCross(pl,m0,m1,-6,true),blueEnd:sunCross(pl,m0,m1,-4,true),sun:sunCross(pl,m0,m1,-0.833,true),gold:sunCross(pl,m0,m1,6,true)};
+  set.az=set.sun?sunAz(set.sun,pl.lat,pl.lng):270;rise.az=rise.sun?sunAz(rise.sun,pl.lat,pl.lng):90;return{set,rise};}
+/* Potencial de color: nubes medias/altas encima (el «lienzo») y horizonte despejado hacia el sol */
+function glowScore(L,Hz){
+  const hm=Math.min(100,L.high+0.7*L.mid);
+  let f=hm<10?0.35:hm<30?0.35+(hm-10)/20*0.55:hm<=70?1:hm<=90?1-(hm-70)/20*0.5:0.45;
+  if(L.low>30)f*=Math.max(0.2,1-(L.low-30)/100*1.3);
+  let hb=null;if(Hz){hb=Hz.low+0.6*Hz.mid;if(hb>40)f*=Math.max(0.25,1-(hb-40)/80);}
+  f*=1-0.7*(L.pp||0)/100;
+  const why=[];
+  if(hb!=null&&hb>60)why.push('horizonte tapado hacia el sol');
+  if(hm>=30&&hm<=70)why.push('nubes medias y altas que pueden encenderse');
+  else if(hm<10)why.push('cielo limpio: tonos suaves, sin nubes que se iluminen');
+  else if(hm>85)why.push('cielo muy cubierto');
+  if(L.low>50)why.push('muchas nubes bajas');
+  if((L.pp||0)>=40)why.push('posible lluvia');
+  return{score:Math.round(100*f),why};}
+function destPoint(lat,lng,az,km){const R=6371,d=km/R,b=az*rad,p1=lat*rad,l1=lng*rad;
+  const p2=Math.asin(Math.sin(p1)*Math.cos(d)+Math.cos(p1)*Math.sin(d)*Math.cos(b));
+  const l2=l1+Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(p1),Math.cos(d)-Math.sin(p1)*Math.sin(p2));
+  return[+(p2/rad).toFixed(3),+(l2/rad).toFixed(3)];}
+/* Nubes bajas y medias a 80 km hacia el ocaso y hacia el orto */
+async function getHorizonPts(pl,setAz,riseAz){
+  try{const W=destPoint(pl.lat,pl.lng,setAz,80),E=destPoint(pl.lat,pl.lng,riseAz,80);
+    const j=await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${W[0]},${E[0]}&longitude=${W[1]},${E[1]}&hourly=cloud_cover_low,cloud_cover_mid&forecast_days=8&timezone=auto&timeformat=unixtime`)).json();
+    if(!Array.isArray(j))return null;
+    const idx=o=>{const m={};o.hourly.time.forEach((t,i)=>m[t]={low:o.hourly.cloud_cover_low[i]??0,mid:o.hourly.cloud_cover_mid[i]??0});return m;};
+    return{set:idx(j[0]),rise:idx(j[1])};}catch(_){return null;}}
+/* Potencial de color usando la hora previa al ocaso (o posterior al orto) */
+function glowFromHourly(H,hz,ms,which){const t=Math.round((ms+(which==='set'?-1800e3:1800e3))/3600e3)*3600,i=H.time.indexOf(t);if(i<0)return null;
+  const L={low:H.cloud_cover_low[i]??0,mid:H.cloud_cover_mid[i]??0,high:H.cloud_cover_high[i]??0,pp:H.precipitation_probability[i]??0};
+  const Hz=hz?hz[t]:null;return Object.assign(glowScore(L,Hz),{hz:!!Hz});}
+/* Tormentas en un intervalo, a partir de la previsión horaria */
+function stormsBetween(H,t0,t1){const hs=[];for(let i=0;i<H.time.length;i++){const ms=H.time[i]*1000;if(ms<t0||ms>=t1)continue;
+  hs.push({ms,code:H.weather_code?.[i]??0,cape:H.cape?.[i]??0,pp:H.precipitation_probability[i]??0});}return stormInfo(hs);}
 const fmtHO=(ms,off)=>{const d=new Date(ms+off*1000);return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');};
 
 
 const cfg=JSON.parse(fs.readFileSync(new URL('./sitios.json',import.meta.url),'utf8'));
 const umbral=cfg.umbral||70, modo=cfg.modo||'deep';
-if(!cfg.topic||!cfg.sitios?.length){console.log('sitios.json sin tema o sin sitios: nada que hacer');process.exit(0);}
+const av=Object.assign({noche:true,atardecer:true,amanecer:true,tormentas:true},cfg.avisos||{});
+const momento=process.env.MOMENTO||(new Date().getUTCHours()<12?'manana':'tarde');
+const toca=k=>av[k]&&(momento==='todo'||(momento==='manana'?['atardecer','tormentas']:['noche','amanecer','tormentas']).includes(k));
+if(!cfg.topic||/PEGA/i.test(cfg.topic)||!cfg.sitios?.length){console.log('sitios.json sin tema o sin sitios: nada que hacer');process.exit(0);}
+console.log('Momento:',momento,'· avisos:',JSON.stringify(av));
 
-const res=[];
+const items=[];   // {prio, icon, text, site, score}
+const manana=[];
 for(const pl of cfg.sitios){
-  try{const {wx,aqIdx}=await getForecast(pl);res.push({pl,n:nightsFor(pl,wx,aqIdx,modo),off:wx.utc_offset_seconds});}
-  catch(e){console.error('Error en',pl.name,e.message);}
+  let f;try{f=await getForecast(pl);}catch(e){console.error('Error en',pl.name,e.message);continue;}
+  const {wx,aqIdx}=f,off=wx.utc_offset_seconds,H=wx.hourly,fh=ms=>fmtHO(ms,off);
+  const today=new Date(Date.now()+off*1000).toISOString().slice(0,10);
+  const ev=sunEvents(pl,today,off);
+  const n=nightsFor(pl,wx,aqIdx,modo);
+  if(toca('noche')&&n[0]){
+    if(n[0].best>=umbral){const c=calima(n[0]);
+      items.push({prio:3,icon:'✨',site:pl.name,score:n[0].best,text:`${pl.name}: noche ${n[0].best}/100 · ${fh(n[0].start)}–${fh(n[0].end)} · nubes ${n[0].cloud}% · luna ${Math.round(n[0].illum*100)}%${c.bad?' · calima '+['','leve','moderada','fuerte'][c.bad]:''}`});}
+    else if(n[1]&&n[1].best>=umbral)manana.push(`${pl.name} ${n[1].best}`);
+  }
+  if(toca('atardecer')||toca('amanecer')){
+    const hz=await getHorizonPts(pl,ev.set.az,ev.rise.az);
+    if(toca('atardecer')&&ev.set.sun&&ev.set.sun>Date.now()){const g=glowFromHourly(H,hz?hz.set:null,ev.set.sun,'set');
+      if(g&&g.score>=umbral)items.push({prio:2,icon:'🌅',site:pl.name,score:g.score,text:`${pl.name}: atardecer ${g.score}/100 a las ${fh(ev.set.sun)} (hora dorada desde ${fh(ev.set.gold)}) · ${g.why.join(', ')}`});}
+    if(toca('amanecer')&&ev.rise.sun){const g=glowFromHourly(H,hz?hz.rise:null,ev.rise.sun,'rise');
+      if(g&&g.score>=umbral)items.push({prio:2,icon:'🌄',site:pl.name,score:g.score,text:`${pl.name}: amanecer ${g.score}/100 a las ${fh(ev.rise.sun)} (hora azul desde ${fh(ev.rise.blue)}) · ${g.why.join(', ')}`});}
+  }
+  if(toca('tormentas')){
+    const t0=Date.now(),t1=momento==='manana'?t0+18*3600e3:t0+16*3600e3;
+    const st=stormsBetween(H,t0,t1);
+    if(st&&st.level>=2)items.push({prio:4,icon:'⚡',site:pl.name,score:st.level,text:`${pl.name}: ${st.level>=3?'tormenta fuerte (posible granizo)':'tormenta prevista'} ${fh(st.start)}–${fh(st.end)}`});
+  }
 }
-const linea=(r,n)=>{const c=calima(n);
-  return `${r.pl.name}: ${n.best}/100 · ${fmtHO(n.start,r.off)}–${fmtHO(n.end,r.off)} · nubes ${n.cloud}% · luna ${Math.round(n.illum*100)}%${c.bad?' · calima '+['','leve','moderada','fuerte'][c.bad]:''}`;};
-
-const hoy=res.filter(r=>r.n[0]&&r.n[0].best>=umbral).sort((a,b)=>b.n[0].best-a.n[0].best);
-const manana=res.filter(r=>r.n[1]&&r.n[1].best>=umbral).sort((a,b)=>b.n[1].best-a.n[1].best);
-let title,message,tags,priority=3;
-if(hoy.length){
-  title=`✨ Buena noche en ${hoy[0].pl.name} (${hoy[0].n[0].best}/100)`;
-  message=hoy.map(r=>linea(r,r.n[0])).join('\n');
-  if(manana.length)message+=`\nMañana también: ${manana.map(r=>r.pl.name+' '+r.n[1].best).join(', ')}`;
-  tags=['milky_way'];priority=4;
-}else if(manana.length){
-  title=`🔭 Mañana pinta bien en ${manana[0].pl.name} (${manana[0].n[1].best}/100)`;
-  message='Esta noche no llega a '+umbral+'.\n'+manana.map(r=>linea(r,r.n[1])).join('\n');
-  tags=['telescope'];
-}else if(cfg.avisarSiempre){
-  title='☁️ Hoy no merece la pena';
-  message=res.map(r=>r.n[0]?`${r.pl.name}: ${r.n[0].best}/100`:'').filter(Boolean).join('\n');
-  tags=['cloud'];priority=2;
-}else{console.log('Ninguna noche llega a',umbral,'— sin aviso');process.exit(0);}
-
+if(!items.length&&!manana.length){console.log('Nada que avisar');process.exit(0);}
+items.sort((a,b)=>b.prio-a.prio||b.score-a.score);
+let title,tags,priority=3;
+if(items.length){const t=items[0],kinds=[...new Set(items.map(i=>i.icon))].join('');
+  title=t.icon==='⚡'?`⚡ Tormenta en ${t.site}`:t.icon==='✨'?`✨ Buena noche en ${t.site} (${t.score}/100)`:t.icon==='🌅'?`🌅 Buen atardecer en ${t.site} (${t.score}/100)`:`🌄 Buen amanecer en ${t.site} (${t.score}/100)`;
+  if(items.length>1)title+=` ${kinds}`;
+  tags=[t.icon==='⚡'?'zap':t.icon==='✨'?'milky_way':'sunrise'];priority=t.prio>=3?4:3;}
+else{title=`🔭 Mañana pinta bien en ${manana[0].split(' ')[0]}`;tags=['telescope'];}
+let message=items.map(i=>i.icon+' '+i.text).join('\n');
+if(manana.length)message+=(message?'\n':'')+`🔭 Noche de mañana: ${manana.join(', ')}`;
 console.log(title+'\n'+message);
 const r=await fetch('https://ntfy.sh/',{method:'POST',headers:{'Content-Type':'application/json'},
   body:JSON.stringify({topic:cfg.topic,title,message,tags,priority,click:cfg.app||undefined})});
