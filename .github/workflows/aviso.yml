@@ -1,17 +1,19 @@
-   name: Aviso de buena noche
-   on:
-     schedule:
-       - cron: '0 8 * * *'    # mañana: atardecer y tormentas del día
-       - cron: '0 17 * * *'   # tarde: noche, amanecer de mañana y tormentas
-     workflow_dispatch:
-   jobs:
-     aviso:
-       runs-on: ubuntu-latest
-       steps:
-         - uses: actions/checkout@v5
-         - uses: actions/setup-node@v5
-           with:
-             node-version: 24
-         - run: node aviso.mjs
-           env:
-             MOMENTO: ${{ github.event_name == 'workflow_dispatch' && 'todo' || '' }}
+  name: Aviso de buena noche
+on:
+  schedule:
+    - cron: '0 8 * * *'    # mañana: atardecer y tormentas del día
+    - cron: '0 17 * * *'   # tarde: noche, amanecer de mañana y tormentas
+  workflow_dispatch:
+jobs:
+  aviso:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: node aviso.mjs
+        env:
+          MOMENTO: ${{ github.event_name == 'workflow_dispatch' && 'todo' || '' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
