@@ -1,0 +1,9 @@
+{
+ "topic": "PEGA-AQUI-TU-TEMA",
+ "umbral": 70,
+ "modo": "deep",
+ "app": "",
+ "sitios": [
+  {"name": "Acusa Seca", "lat": 28.0312, "lng": -15.6953}
+ ]
+}
