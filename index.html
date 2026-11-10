@@ -23,11 +23,13 @@ body.red{filter:sepia(1) saturate(6) hue-rotate(-50deg) brightness(.7)}
 #stars{position:fixed;inset:0;pointer-events:none;z-index:0}
 .wrap{position:relative;z-index:1;max-width:520px;margin:auto;padding:max(14px,env(safe-area-inset-top)) 14px 40px}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-.top{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.top{display:flex;align-items:center;gap:6px;margin-bottom:12px}
+@media (max-width:380px){.iconbtn{width:36px;height:36px;font-size:16px}.locbtn{font-size:14px;padding:7px 10px}}
 .brand{font-weight:800;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);flex:1}
-.locbtn{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:600;max-width:70%;backdrop-filter:blur(10px)}
+.locbtn{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:600;flex:1 1 auto;min-width:0;backdrop-filter:blur(10px)}
+.locbtn span{flex:1;min-width:0;text-align:left}
 .locbtn span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.iconbtn{width:40px;height:40px;border-radius:50%;background:var(--card);border:1px solid var(--line);display:grid;place-items:center;font-size:18px}
+.iconbtn{flex:none;width:40px;height:40px;border-radius:50%;background:var(--card);border:1px solid var(--line);display:grid;place-items:center;font-size:18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin:12px 0;backdrop-filter:blur(12px)}
 .card h3{margin:0 0 10px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);font-weight:700}
 .hidden{display:none!important}
@@ -150,7 +152,6 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   <div class="top">
     <button class="locbtn" id="locbtn">📍 <span id="locname">Elige un lugar</span> ▾</button>
     <button class="iconbtn" id="favbtn" title="Guardar este sitio">☆</button>
-    <div style="flex:1"></div>
     <button class="iconbtn" id="monbtn" title="Calendario del mes">📅</button>
     <button class="iconbtn" id="redbtn" title="Modo rojo">🔴</button>
     <button class="iconbtn" id="setbtn" title="Ajustes">⚙️</button>
@@ -201,7 +202,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="sub">🛰️ Satélites que se calculan</div>
     <div id="satlist"></div>
     <div class="addsat"><input id="norad" inputmode="numeric" placeholder="Nº NORAD (ej. 25544)"><button id="addsat">Añadir</button></div>
-    <div class="note" style="margin-top:12px">Versión 2026-11-10b · atardeceres y tormentas<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de 2 h.<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
+    <div class="note" style="margin-top:12px">Versión 2026-11-10c · atardeceres y tormentas<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de 2 h.<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
   </section>
 
   <div id="monthview" class="hidden"></div>
