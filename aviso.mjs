@@ -148,51 +148,72 @@ function stormsBetween(H,t0,t1){const hs=[];for(let i=0;i<H.time.length;i++){con
 const fmtHO=(ms,off)=>{const d=new Date(ms+off*1000);return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');};
 
 
-const cfg=JSON.parse(fs.readFileSync(new URL('./sitios.json',import.meta.url),'utf8'));
-const umbral=cfg.umbral||70, modo=cfg.modo||'deep', ventana=cfg.ventana||2;
-const av=Object.assign({noche:true,atardecer:true,amanecer:true,tormentas:true},cfg.avisos||{});
-const momento=process.env.MOMENTO||(new Date().getUTCHours()<12?'manana':'tarde');
-const toca=k=>av[k]&&(momento==='todo'||(momento==='manana'?['atardecer','tormentas']:['noche','amanecer','tormentas']).includes(k));
-if(!cfg.topic||/PEGA/i.test(cfg.topic)||!cfg.sitios?.length){console.log('sitios.json sin tema o sin sitios: nada que hacer');process.exit(0);}
-console.log('Momento:',momento,'· avisos:',JSON.stringify(av));
-
-const items=[];   // {prio, icon, text, site, score}
-const manana=[];
-for(const pl of cfg.sitios){
-  let f;try{f=await getForecast(pl);}catch(e){console.error('Error en',pl.name,e.message);continue;}
-  const {wx,aqIdx}=f,off=wx.utc_offset_seconds,H=wx.hourly,fh=ms=>fmtHO(ms,off);
-  const today=new Date(Date.now()+off*1000).toISOString().slice(0,10);
-  const ev=sunEvents(pl,today,off);
-  const n=nightsFor(pl,wx,aqIdx,modo,ventana,umbral);
-  if(toca('noche')&&n[0]){
-    if(n[0].best>=umbral){const c=calima(n[0]);
-      items.push({prio:3,icon:'✨',site:pl.name,score:n[0].best,text:`${pl.name}: noche ${n[0].best}/100 · ${n[0].W>=n[0].dark?'toda la noche':'tramo de '+n[0].W+' h'} ${fh(n[0].start)}–${fh(n[0].end)} · ${n[0].goodH} h buenas seguidas · nubes ${n[0].cloud}% · luna ${Math.round(n[0].illum*100)}%${c.bad?' · calima '+['','leve','moderada','fuerte'][c.bad]:''}`});}
-    else if(n[1]&&n[1].best>=umbral)manana.push(`${pl.name} ${n[1].best}`);
-  }
-  if(toca('atardecer')||toca('amanecer')){
-    const hz=await getHorizonPts(pl,ev.set.az,ev.rise.az);
-    if(toca('atardecer')&&ev.set.sun&&ev.set.sun>Date.now()){const g=glowFromHourly(H,hz?hz.set:null,ev.set.sun,'set');
-      if(g&&g.score>=umbral)items.push({prio:2,icon:'🌅',site:pl.name,score:g.score,text:`${pl.name}: atardecer ${g.score}/100 a las ${fh(ev.set.sun)} (hora dorada desde ${fh(ev.set.gold)}) · ${g.why.join(', ')}`});}
-    if(toca('amanecer')&&ev.rise.sun){const g=glowFromHourly(H,hz?hz.rise:null,ev.rise.sun,'rise');
-      if(g&&g.score>=umbral)items.push({prio:2,icon:'🌄',site:pl.name,score:g.score,text:`${pl.name}: amanecer ${g.score}/100 a las ${fh(ev.rise.sun)} (hora azul desde ${fh(ev.rise.blue)}) · ${g.why.join(', ')}`});}
-  }
-  if(toca('tormentas')){
-    const t0=Date.now(),t1=momento==='manana'?t0+18*3600e3:t0+16*3600e3;
-    const st=stormsBetween(H,t0,t1);
-    if(st&&st.level>=2)items.push({prio:4,icon:'⚡',site:pl.name,score:st.level,text:`${pl.name}: ${st.level>=3?'tormenta fuerte (posible granizo)':'tormenta prevista'} ${fh(st.start)}–${fh(st.end)}`});
-  }
+/* ---- Usuarios: todos los de Supabase (si está configurado) o el sitios.json del repositorio ---- */
+const SB_URL=process.env.SUPABASE_URL, SB_KEY=process.env.SUPABASE_SERVICE_KEY;
+let usuarios=[];
+if(SB_URL&&SB_KEY){
+  const h={apikey:SB_KEY};if(SB_KEY.startsWith('eyJ'))h.Authorization='Bearer '+SB_KEY;
+  const r=await fetch(`${SB_URL.replace(/\/$/,'')}/rest/v1/perfiles?select=email,config`,{headers:h});
+  if(!r.ok){console.error('Supabase',r.status,await r.text());process.exit(1);}
+  usuarios=(await r.json()).map(x=>Object.assign({email:x.email},x.config||{}));
+  console.log('Usuarios en Supabase:',usuarios.length);
+}else{
+  usuarios=[JSON.parse(fs.readFileSync(new URL('./sitios.json',import.meta.url),'utf8'))];
 }
-if(!items.length&&!manana.length){console.log('Nada que avisar');process.exit(0);}
-items.sort((a,b)=>b.prio-a.prio||b.score-a.score);
-let title,tags,priority=3;
-if(items.length){const t=items[0],kinds=[...new Set(items.map(i=>i.icon))].join('');
-  title=t.icon==='⚡'?`⚡ Tormenta en ${t.site}`:t.icon==='✨'?`✨ Buena noche en ${t.site} (${t.score}/100)`:t.icon==='🌅'?`🌅 Buen atardecer en ${t.site} (${t.score}/100)`:`🌄 Buen amanecer en ${t.site} (${t.score}/100)`;
-  if(items.length>1)title+=` ${kinds}`;
-  tags=[t.icon==='⚡'?'zap':t.icon==='✨'?'milky_way':'sunrise'];priority=t.prio>=3?4:3;}
-else{title=`🔭 Mañana pinta bien en ${manana[0].split(' ')[0]}`;tags=['telescope'];}
-let message=items.map(i=>i.icon+' '+i.text).join('\n');
-if(manana.length)message+=(message?'\n':'')+`🔭 Noche de mañana: ${manana.join(', ')}`;
-console.log(title+'\n'+message);
-const r=await fetch('https://ntfy.sh/',{method:'POST',headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({topic:cfg.topic,title,message,tags,priority,click:cfg.app||undefined})});
-console.log('ntfy:',r.status);
+const momento=process.env.MOMENTO||(new Date().getUTCHours()<12?'manana':'tarde');
+console.log('Momento:',momento);
+
+/* La previsión de un mismo sitio se descarga una sola vez aunque lo tengan varios usuarios */
+const cacheF=new Map(),cacheH=new Map();
+const prev=pl=>{const k=pl.lat.toFixed(3)+','+pl.lng.toFixed(3);if(!cacheF.has(k))cacheF.set(k,getForecast(pl));return cacheF.get(k);};
+const horiz=(pl,a,b)=>{const k=pl.lat.toFixed(3)+','+pl.lng.toFixed(3);if(!cacheH.has(k))cacheH.set(k,getHorizonPts(pl,a,b));return cacheH.get(k);};
+
+async function procesar(cfg){
+  const umbral=cfg.umbral||70, modo=cfg.modo||'deep', ventana=cfg.ventana||2;
+  const av=Object.assign({noche:true,atardecer:true,amanecer:true,tormentas:true},cfg.avisos||{});
+  const toca=k=>av[k]&&(momento==='todo'||(momento==='manana'?['atardecer','tormentas']:['noche','amanecer','tormentas']).includes(k));
+  if(!cfg.topic||/PEGA/i.test(cfg.topic)||!cfg.sitios?.length)return'sin tema o sin sitios';
+  const items=[],manana=[];
+  for(const pl of cfg.sitios){
+    let f;try{f=await prev(pl);}catch(e){console.error('Error en',pl.name,e.message);continue;}
+    const {wx,aqIdx}=f,off=wx.utc_offset_seconds,H=wx.hourly,fh=ms=>fmtHO(ms,off);
+    const today=new Date(Date.now()+off*1000).toISOString().slice(0,10);
+    const ev=sunEvents(pl,today,off);
+    const n=nightsFor(pl,wx,aqIdx,modo,ventana,umbral);
+    if(toca('noche')&&n[0]){
+      if(n[0].best>=umbral){const c=calima(n[0]);
+        items.push({prio:3,icon:'✨',site:pl.name,score:n[0].best,text:`${pl.name}: noche ${n[0].best}/100 · ${n[0].W>=n[0].dark?'toda la noche':'tramo de '+n[0].W+' h'} ${fh(n[0].start)}–${fh(n[0].end)} · ${n[0].goodH} h buenas seguidas · nubes ${n[0].cloud}% · luna ${Math.round(n[0].illum*100)}%${c.bad?' · calima '+['','leve','moderada','fuerte'][c.bad]:''}`});}
+      else if(n[1]&&n[1].best>=umbral)manana.push(`${pl.name} ${n[1].best}`);
+    }
+    if(toca('atardecer')||toca('amanecer')){
+      const hz=await horiz(pl,ev.set.az,ev.rise.az);
+      if(toca('atardecer')&&ev.set.sun&&ev.set.sun>Date.now()){const g=glowFromHourly(H,hz?hz.set:null,ev.set.sun,'set');
+        if(g&&g.score>=umbral)items.push({prio:2,icon:'🌅',site:pl.name,score:g.score,text:`${pl.name}: atardecer ${g.score}/100 a las ${fh(ev.set.sun)} (hora dorada desde ${fh(ev.set.gold)}) · ${g.why.join(', ')}`});}
+      if(toca('amanecer')&&ev.rise.sun){const g=glowFromHourly(H,hz?hz.rise:null,ev.rise.sun,'rise');
+        if(g&&g.score>=umbral)items.push({prio:2,icon:'🌄',site:pl.name,score:g.score,text:`${pl.name}: amanecer ${g.score}/100 a las ${fh(ev.rise.sun)} (hora azul desde ${fh(ev.rise.blue)}) · ${g.why.join(', ')}`});}
+    }
+    if(toca('tormentas')){
+      const t0=Date.now(),t1=momento==='manana'?t0+18*3600e3:t0+16*3600e3;
+      const st=stormsBetween(H,t0,t1);
+      if(st&&st.level>=2)items.push({prio:4,icon:'⚡',site:pl.name,score:st.level,text:`${pl.name}: ${st.level>=3?'tormenta fuerte (posible granizo)':'tormenta prevista'} ${fh(st.start)}–${fh(st.end)}`});
+    }
+  }
+  if(!items.length&&!manana.length)return'nada que avisar';
+  items.sort((a,b)=>b.prio-a.prio||b.score-a.score);
+  let title,tags,priority=3;
+  if(items.length){const t=items[0],kinds=[...new Set(items.map(i=>i.icon))].join('');
+    title=t.icon==='⚡'?`⚡ Tormenta en ${t.site}`:t.icon==='✨'?`✨ Buena noche en ${t.site} (${t.score}/100)`:t.icon==='🌅'?`🌅 Buen atardecer en ${t.site} (${t.score}/100)`:`🌄 Buen amanecer en ${t.site} (${t.score}/100)`;
+    if(items.length>1)title+=` ${kinds}`;
+    tags=[t.icon==='⚡'?'zap':t.icon==='✨'?'milky_way':'sunrise'];priority=t.prio>=3?4:3;}
+  else{title=`🔭 Mañana pinta bien en ${manana[0].replace(/ \d+$/,'')}`;tags=['telescope'];}
+  let message=items.map(i=>i.icon+' '+i.text).join('\n');
+  if(manana.length)message+=(message?'\n':'')+`🔭 Noche de mañana: ${manana.join(', ')}`;
+  const r=await fetch('https://ntfy.sh/',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({topic:cfg.topic,title,message,tags,priority,click:cfg.app||undefined})});
+  return `aviso enviado (${r.status}): ${title}`;
+}
+
+let i=0;
+for(const u of usuarios){i++;
+  try{console.log(`Usuario ${i}:`,await procesar(u));}catch(e){console.error(`Usuario ${i}: error`,e.message);}
+}

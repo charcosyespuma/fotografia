@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--bg:#070a14;--card:rgba(22,28,46,.78);--line:rgba(255,255,255,.08);--text:#eef1fa;--mute:#8d96ad;
   --acc:#8fb3ff;--good:#3fd69a;--ok:#f0c64a;--bad:#ff6b57;--r:20px}
@@ -37,6 +38,11 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .search{display:flex;gap:8px}
 .search input{flex:1;min-width:0;font:inherit;color:var(--text);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .search .go{background:var(--acc);color:#0a0f22;font-weight:700;border-radius:14px;padding:0 16px}
+.authform{display:flex;flex-direction:column;gap:10px}
+.authform input{font:inherit;color:var(--text);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:14px;padding:13px 14px}
+.authform .go{background:var(--acc);color:#0a0f22;font-weight:800;border-radius:14px;padding:13px}
+.authlinks{display:flex;flex-direction:column;gap:10px;margin-top:14px;text-align:center}
+.authlinks button{color:var(--acc);font-size:13.5px}
 .geobig{width:100%;margin-top:10px;padding:12px;border-radius:14px;background:rgba(143,179,255,.14);border:1px solid rgba(143,179,255,.35);color:var(--text);font-weight:700}
 #results{list-style:none;margin:8px 0 0;padding:0}
 #results li{padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.05);margin:6px 0;cursor:pointer}
@@ -149,7 +155,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   <div class="top">
     <div class="brand">🌌 El Tiempo Esta Noche</div>
   </div>
-  <div class="top">
+  <div class="top" id="topbar">
     <button class="locbtn" id="locbtn">📍 <span id="locname">Elige un lugar</span> ▾</button>
     <button class="iconbtn" id="favbtn" title="Guardar este sitio">☆</button>
     <button class="iconbtn" id="monbtn" title="Calendario del mes">📅</button>
@@ -184,7 +190,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     </div>
     <div class="note" style="margin-top:6px">En «Vía Láctea» la Luna penaliza mucho; en «Paisaje» casi no cuenta.</div>
     <div class="set"><span>Modo rojo (visión nocturna)</span><button class="toggle" id="redtog"></button></div>
-    <div class="sub">🔄 Sincronizar móvil y ordenador</div>
+    <div class="sub" id="synctitle">🔄 Sincronizar móvil y ordenador</div>
     <div id="syncbox"></div>
     <div class="sub">⭐ Mis sitios</div>
     <div id="favlist"><span class="note">Aún no has guardado ninguno. Elige un lugar y toca ☆ arriba.</span></div>
@@ -205,9 +211,21 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="sub">🛰️ Satélites que se calculan</div>
     <div id="satlist"></div>
     <div class="addsat"><input id="norad" inputmode="numeric" placeholder="Nº NORAD (ej. 25544)"><button id="addsat">Añadir</button></div>
-    <div class="note" style="margin-top:12px">Versión 2026-11-10d · atardeceres y tormentas<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
+    <div class="note" style="margin-top:12px">Versión 2026-11-10f · cuentas · atardeceres y tormentas<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
   </section>
 
+  <section class="card hidden" id="auth">
+    <div style="text-align:center;margin:6px 0 14px"><img src="icon-192.png" alt="" style="width:72px;height:72px;border-radius:18px" onerror="this.remove()"></div>
+    <h3 id="authtitle" style="text-align:center">Entra en tu cuenta</h3>
+    <div class="note" id="authintro" style="text-align:center;margin-bottom:12px">Tus sitios y avisos se guardan en tu cuenta y los verás en todos tus dispositivos.</div>
+    <form id="authform" class="authform" autocomplete="on">
+      <input id="aemail" type="email" placeholder="Correo electrónico" autocomplete="email" required>
+      <input id="apass" type="password" placeholder="Contraseña (mínimo 6 caracteres)" autocomplete="current-password" minlength="6" required>
+      <button type="submit" class="go" id="asubmit">Entrar</button>
+    </form>
+    <div class="note" id="amsg" style="text-align:center;min-height:18px;margin-top:8px"></div>
+    <div class="authlinks"><button id="aswitch">¿No tienes cuenta? <b>Créala gratis</b></button><button id="aforgot">¿Olvidaste la contraseña?</button></div>
+  </section>
   <div id="monthview" class="hidden"></div>
   <div id="app"></div>
 </div>
@@ -663,7 +681,8 @@ async function ghGet(){const r=await fetch(ghUrl(),{headers:ghHead(),cache:'no-s
   const j=await r.json();let data=null;try{data=JSON.parse(b64d(j.content));}catch(_){}return{data,sha:j.sha};}
 function setSync(t){syncMsg=t;paintSync();}
 async function syncPull(){
-  if(!GH)return;setSync('⏳ Sincronizando…');
+  if(SB)return sbPull();
+  if(!GH||!ghToken)return;   // sin clave no se lee nada: cada visitante usa solo sus propios datossetSync('⏳ Sincronizando…');
   try{const {data,sha}=await ghGet();ghSha=sha;
     if(data){const rf=Array.isArray(data.sitios)?data.sitios:[];
       if(ghToken&&ghSynced){favs=rf;}                         // ya sincronizado: manda GitHub
@@ -677,7 +696,7 @@ async function syncPull(){
     setSync(ghToken?'✓ Sincronizado':'👁️ Leyendo tus sitios de GitHub. Para guardar cambios desde aquí, conecta este dispositivo.');
   }catch(e){setSync(e.message==='token'?'⚠️ La clave de GitHub no es válida o ha caducado.':'⚠️ No se pudo sincronizar ('+e.message+').');}
 }
-function schedulePush(){if(!GH||!ghToken)return;clearTimeout(pushTimer);setSync('⏳ Guardando…');pushTimer=setTimeout(()=>syncPush(),1200);}
+function schedulePush(){if(SB){if(!sbUser)return;clearTimeout(pushTimer);setSync('⏳ Guardando…');pushTimer=setTimeout(sbPush,1000);return;}if(!GH||!ghToken)return;clearTimeout(pushTimer);setSync('⏳ Guardando…');pushTimer=setTimeout(()=>syncPush(),1200);}
 async function syncPush(first,retry){
   if(!GH||!ghToken)return;
   try{const body={message:first?'Sincronizar sitios desde la app':'Actualizar sitios desde la app',content:b64e(JSON.stringify(cfgObj(),null,1)+'\n')};
@@ -691,10 +710,13 @@ async function syncPush(first,retry){
 }
 function paintSync(){
   const box=$('syncbox');if(!box)return;
+  if(SB){box.innerHTML=sbUser?`<div class="note">👤 ${esc(sbUser.email)}<br>${syncMsg||'✓ Guardado en tu cuenta'}</div>
+      <div class="addsat"><button id="sbsync" style="flex:1;padding:10px">🔄 Sincronizar ahora</button><button id="sbout">Cerrar sesión</button></div>`:'';
+    const a=$('sbsync');if(a)a.onclick=sbPull;const o=$('sbout');if(o)o.onclick=()=>SB.auth.signOut();return;}
   if(!GH){box.innerHTML='<div class="note">Solo funciona abriendo la app desde tu web de GitHub (charcosyespuma.github.io/…).</div>';return;}
   box.innerHTML=ghToken?`<div class="note">${syncMsg||'✓ Conectado'}</div>
       <div class="addsat"><button id="syncnow" style="flex:1;padding:10px">🔄 Sincronizar ahora</button><button id="ghout">Desconectar</button></div>`
-    :`<div class="note">${syncMsg?syncMsg+'<br>':''}Para que móvil y ordenador compartan los sitios, conecta cada dispositivo una vez con una clave de GitHub:<br>
+    :`<div class="note">${syncMsg?syncMsg+'<br>':''}<b>Solo para el propietario de esta web.</b> Si usas la app de otra persona, ignora esta sección: tus sitios se guardan en este dispositivo.<br><br>Para que móvil y ordenador compartan los sitios, conecta cada dispositivo una vez con una clave de GitHub:<br>
       1. Abre <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com → crear clave (fine-grained token)</a>.<br>
       2. Nombre: <i>El Tiempo Esta Noche</i>. Caducidad: la más larga que te deje.<br>
       3. <b>Repository access</b> → <i>Only select repositories</i> → <b>${GH.repo}</b>.<br>
@@ -707,6 +729,60 @@ function paintSync(){
     try{const r=await fetch(`https://api.github.com/repos/${GH.owner}/${GH.repo}`,{headers:ghHead()});const j=await r.json();
       if(!r.ok||!j.permissions?.push)throw 0;}catch(_){ghToken='';setSync('⚠️ Esa clave no sirve para este repositorio. Revisa los pasos 3 y 4.');return;}
     save('ghtoken',ghToken);ghSynced=false;save('synced',false);syncMsg='';syncPull();};
+}
+
+/* ===== Cuentas de usuario (Supabase) ===== */
+const SB_URL='https://zhgwdzqskrfwuavogetq.supabase.co', SB_KEY='sb_publishable_eO_2M7exSjwj6_x--r1ZIQ_I0FqSrrs';   // se rellenan al montar Supabase; vacíos = modo sin cuentas
+const SB=(SB_URL&&SB_KEY&&typeof supabase!=='undefined')?supabase.createClient(SB_URL,SB_KEY):null;
+let sbUser=null,authMode='login',appStarted=false;
+function applyCfg(c){
+  if(Array.isArray(c.sitios))favs=c.sitios;
+  if(c.topic&&/^[A-Za-z0-9_-]{6,64}$/.test(c.topic))topic=c.topic;
+  if(c.umbral)umbral=+c.umbral;if(c.ventana)ventana=+c.ventana;
+  if(c.avisos)avisos=Object.assign({noche:true,atardecer:true,amanecer:true,tormentas:true},c.avisos);
+  if(c.modo==='deep'||c.modo==='land'){mode=c.modo;save('mode',mode);paintMode();}
+  save('favs',favs);save('topic',topic);save('umbral',umbral);save('ventana',ventana);save('avisos',avisos);
+  paintFavs();paintCfg();if(wx){build();render();}}
+async function sbPull(){
+  if(!SB||!sbUser)return;setSync('⏳ Sincronizando…');
+  const {data,error}=await SB.from('perfiles').select('config').eq('user_id',sbUser.id).maybeSingle();
+  if(error){setSync('⚠️ No se pudo leer tu cuenta ('+error.message+').');return;}
+  if(data&&data.config)applyCfg(data.config);
+  else await sbPush();                       // primera vez: se guardan los sitios que ya tenías en este dispositivo
+  setSync('✓ Guardado en tu cuenta');}
+async function sbPush(){
+  if(!SB||!sbUser)return;
+  const {error}=await SB.from('perfiles').upsert({user_id:sbUser.id,email:sbUser.email,config:cfgObj(),updated_at:new Date().toISOString()});
+  setSync(error?'⚠️ No se pudo guardar ('+error.message+').':'✓ Guardado en tu cuenta');}
+function showAuth(mode){authMode=mode||authMode;
+  ['app','monthview','settings','picker'].forEach(id=>$(id).classList.add('hidden'));$('topbar').classList.add('hidden');$('auth').classList.remove('hidden');
+  const reg=authMode==='register',rec=authMode==='newpass';
+  $('authtitle').textContent=rec?'Elige una contraseña nueva':reg?'Crea tu cuenta':'Entra en tu cuenta';
+  $('aemail').classList.toggle('hidden',rec);$('aemail').required=!rec;
+  $('apass').autocomplete=reg||rec?'new-password':'current-password';
+  $('asubmit').textContent=rec?'Guardar contraseña':reg?'Crear cuenta':'Entrar';
+  $('aswitch').innerHTML=reg?'¿Ya tienes cuenta? <b>Entra</b>':'¿No tienes cuenta? <b>Créala gratis</b>';
+  $('aswitch').classList.toggle('hidden',rec);$('aforgot').classList.toggle('hidden',reg||rec);}
+function hideAuth(){$('auth').classList.add('hidden');$('topbar').classList.remove('hidden');setView('main');}
+const amsg=(t,bad)=>{$('amsg').innerHTML=t;$('amsg').style.color=bad?'var(--bad)':'';};
+const authErr=m=>/Invalid login/i.test(m)?'Correo o contraseña incorrectos.':/not confirmed/i.test(m)?'Aún no has confirmado tu correo. Revisa tu bandeja de entrada (y el spam).':/already registered/i.test(m)?'Ese correo ya tiene cuenta. Entra con él.':/rate limit/i.test(m)?'Demasiados intentos; espera unos minutos.':m;
+if(SB){
+  $('aswitch').onclick=()=>{amsg('');showAuth(authMode==='register'?'login':'register');};
+  $('aforgot').onclick=async()=>{const em=$('aemail').value.trim();if(!em){amsg('Escribe tu correo arriba y vuelve a pulsar.',true);return;}
+    const {error}=await SB.auth.resetPasswordForEmail(em,{redirectTo:APP_URL||location.href});
+    amsg(error?authErr(error.message):'📧 Te hemos enviado un correo para cambiar la contraseña.',!!error);};
+  $('authform').onsubmit=async e=>{e.preventDefault();const em=$('aemail').value.trim(),pw=$('apass').value;amsg('⏳');
+    if(authMode==='newpass'){const {error}=await SB.auth.updateUser({password:pw});if(error)return amsg(authErr(error.message),true);amsg('');authMode='login';return hideAuth();}
+    if(authMode==='register'){const {data,error}=await SB.auth.signUp({email:em,password:pw,options:{emailRedirectTo:APP_URL||location.href}});
+      if(error)return amsg(authErr(error.message),true);
+      if(!data.session){amsg('📧 Cuenta creada. Te hemos enviado un correo: pulsa el enlace para confirmarla y después entra aquí.');showAuth('login');}
+      return;}
+    const {error}=await SB.auth.signInWithPassword({email:em,password:pw});if(error)amsg(authErr(error.message),true);else amsg('');};
+  SB.auth.onAuthStateChange((ev,session)=>{
+    if(ev==='PASSWORD_RECOVERY'){sbUser=session?.user||null;showAuth('newpass');return;}
+    if(ev==='SIGNED_OUT'){sbUser=null;   // en un móvil compartido no se quedan los datos del anterior
+      favs=[];save('favs',favs);topic='charcosyespuma-'+Math.random().toString(36).slice(2,10);save('topic',topic);paintFavs();showAuth('login');return;}
+    if(session&&session.user&&(!sbUser||sbUser.id!==session.user.id)){sbUser=session.user;if(authMode!=='newpass'){hideAuth();startApp();}sbPull();paintSync();}});
 }
 
 /* ===== Ajustes ===== */
@@ -885,10 +961,16 @@ function findPasses(t,t0,t1){
 }
 
 /* ===== Inicio ===== */
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&GH)syncPull();});
-paintMode();paintSats();paintFavs();paintSync();syncPull();setRed(load('red',false));
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&(SB?sbUser:GH))syncPull();});
+paintMode();paintSats();paintFavs();setRed(load('red',false));
+if(SB){$('synctitle').textContent='👤 Tu cuenta';}
+function startApp(){if(appStarted)return;appStarted=true;
 if(place){$('locname').textContent=place.name;showPicker(false);fetchWeather();}
 else{showPicker(true);$('app').innerHTML='<div class="card empty"><div class="big">🔭</div><p><b>Elige dónde vas a fotografiar</b></p><p class="note">Busca un lugar, toca un punto del mapa o usa tu ubicación, y te diré si merece la pena salir esta noche.</p></div>';}
+}
+paintSync();
+if(SB){SB.auth.getSession().then(({data})=>{if(data.session){sbUser=data.session.user;startApp();sbPull();paintSync();}else if(authMode!=='newpass')showAuth('login');});}
+else{startApp();syncPull();}
 </script>
 </body>
 </html>
