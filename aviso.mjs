@@ -69,7 +69,7 @@ async function getForecast(pl){
   return{wx,aqIdx};
 }
 /* Agrupa las horas oscuras en noches y puntúa cada una por su mejor tramo de 2 h */
-function nightsFor(pl,wx,aqIdx,mode){
+function nightsFor(pl,wx,aqIdx,mode,win=2,thr=70){
   const H=wx.hourly,off=wx.utc_offset_seconds,now=Date.now(),g={};
   for(let i=0;i<H.time.length;i++){
     const ms=H.time[i]*1000;if(ms<now-3600e3)continue;
@@ -83,9 +83,13 @@ function nightsFor(pl,wx,aqIdx,mode){
     h.s=hourScore(h,mode);(g[key]=g[key]||[]).push(h);
   }
   return Object.entries(g).filter(([,hs])=>hs.length>=3).slice(0,7).map(([key,hs])=>{
-    let best=-1,bi=0;for(let i=0;i<hs.length-1;i++){const v=(hs[i].s+hs[i+1].s)/2;if(v>best){best=v;bi=i;}}
-    const w=hs.slice(bi,bi+2);const wavg=k=>Math.round(w.reduce((a,h)=>a+h[k],0)/w.length);
-    return{key,hs,best:Math.round(best),bi,bestms:hs[bi].ms+3600e3,start:hs[bi].ms,end:hs[Math.min(bi+1,hs.length-1)].ms+3600e3,
+    /* Mejor tramo de «win» horas seguidas (toda la noche si win es mayor que la noche) */
+    const W=Math.max(1,Math.min(win,hs.length));let best=-1,bi=0;
+    for(let i=0;i+W<=hs.length;i++){let sum=0;for(let k=i;k<i+W;k++)sum+=hs[k].s;const v=sum/W;if(v>best){best=v;bi=i;}}
+    /* Racha más larga de horas buenas (puntuación >= thr) */
+    let run=0,gH=0,gS=0,gE=0,rs=0;hs.forEach((h,i)=>{if(h.s>=thr){if(!run)rs=i;run++;if(run>gH){gH=run;gS=hs[rs].ms;gE=h.ms+3600e3;}}else run=0;});
+    const w=hs.slice(bi,bi+W);const wavg=k=>Math.round(w.reduce((a,h)=>a+h[k],0)/w.length);
+    return{key,hs,W,best:Math.round(best),bi,bestms:hs[bi].ms+W*1800e3,start:hs[bi].ms,end:hs[bi+W-1].ms+3600e3,goodH:gH,goodS:gS,goodE:gE,dark:hs.length,
       cloud:wavg('total'),wind:wavg('wind'),rh:wavg('rh'),pp:Math.max(...hs.map(h=>h.pp)),
       illum:hs[Math.floor(hs.length/2)].illum,phase:hs[Math.floor(hs.length/2)].phase,moonUp:hs.filter(h=>h.malt>0).length,
       fog:w.some(h=>h.t-h.td<2),dust:w[0].dust==null?null:Math.round(Math.max(...w.map(h=>h.dust??0))),aod:w[0].aod==null?null:Math.max(...w.map(h=>h.aod??0)),
@@ -145,7 +149,7 @@ const fmtHO=(ms,off)=>{const d=new Date(ms+off*1000);return String(d.getUTCHours
 
 
 const cfg=JSON.parse(fs.readFileSync(new URL('./sitios.json',import.meta.url),'utf8'));
-const umbral=cfg.umbral||70, modo=cfg.modo||'deep';
+const umbral=cfg.umbral||70, modo=cfg.modo||'deep', ventana=cfg.ventana||2;
 const av=Object.assign({noche:true,atardecer:true,amanecer:true,tormentas:true},cfg.avisos||{});
 const momento=process.env.MOMENTO||(new Date().getUTCHours()<12?'manana':'tarde');
 const toca=k=>av[k]&&(momento==='todo'||(momento==='manana'?['atardecer','tormentas']:['noche','amanecer','tormentas']).includes(k));
@@ -159,10 +163,10 @@ for(const pl of cfg.sitios){
   const {wx,aqIdx}=f,off=wx.utc_offset_seconds,H=wx.hourly,fh=ms=>fmtHO(ms,off);
   const today=new Date(Date.now()+off*1000).toISOString().slice(0,10);
   const ev=sunEvents(pl,today,off);
-  const n=nightsFor(pl,wx,aqIdx,modo);
+  const n=nightsFor(pl,wx,aqIdx,modo,ventana,umbral);
   if(toca('noche')&&n[0]){
     if(n[0].best>=umbral){const c=calima(n[0]);
-      items.push({prio:3,icon:'✨',site:pl.name,score:n[0].best,text:`${pl.name}: noche ${n[0].best}/100 · ${fh(n[0].start)}–${fh(n[0].end)} · nubes ${n[0].cloud}% · luna ${Math.round(n[0].illum*100)}%${c.bad?' · calima '+['','leve','moderada','fuerte'][c.bad]:''}`});}
+      items.push({prio:3,icon:'✨',site:pl.name,score:n[0].best,text:`${pl.name}: noche ${n[0].best}/100 · ${n[0].W>=n[0].dark?'toda la noche':'tramo de '+n[0].W+' h'} ${fh(n[0].start)}–${fh(n[0].end)} · ${n[0].goodH} h buenas seguidas · nubes ${n[0].cloud}% · luna ${Math.round(n[0].illum*100)}%${c.bad?' · calima '+['','leve','moderada','fuerte'][c.bad]:''}`});}
     else if(n[1]&&n[1].best>=umbral)manana.push(`${pl.name} ${n[1].best}`);
   }
   if(toca('atardecer')||toca('amanecer')){

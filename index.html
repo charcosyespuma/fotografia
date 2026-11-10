@@ -174,6 +174,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   <!-- Ajustes -->
   <section class="card hidden" id="settings">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><button id="setback" class="iconbtn" style="width:34px;height:34px;font-size:16px">←</button><h3 style="margin:0">Ajustes</h3></div>
+    <div class="sub" style="margin-top:0">Duración de la sesión</div>
+    <div class="seg" id="ventana"><button data-v="2">2 h</button><button data-v="4">4 h</button><button data-v="6">6 h</button><button data-v="24">Toda la noche</button></div>
+    <div class="note" style="margin-top:6px;margin-bottom:12px">La nota de cada noche y los avisos se basan en el mejor tramo de esta duración.</div>
     <div class="sub" style="margin-top:0">Tipo de fotografía</div>
     <div class="seg" id="mode">
       <button data-m="deep">🌌 Vía Láctea</button>
@@ -202,7 +205,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="sub">🛰️ Satélites que se calculan</div>
     <div id="satlist"></div>
     <div class="addsat"><input id="norad" inputmode="numeric" placeholder="Nº NORAD (ej. 25544)"><button id="addsat">Añadir</button></div>
-    <div class="note" style="margin-top:12px">Versión 2026-11-10c · atardeceres y tormentas<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de 2 h.<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
+    <div class="note" style="margin-top:12px">Versión 2026-11-10d · atardeceres y tormentas<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
   </section>
 
   <div id="monthview" class="hidden"></div>
@@ -278,7 +281,7 @@ async function getForecast(pl){
   return{wx,aqIdx};
 }
 /* Agrupa las horas oscuras en noches y puntúa cada una por su mejor tramo de 2 h */
-function nightsFor(pl,wx,aqIdx,mode){
+function nightsFor(pl,wx,aqIdx,mode,win=2,thr=70){
   const H=wx.hourly,off=wx.utc_offset_seconds,now=Date.now(),g={};
   for(let i=0;i<H.time.length;i++){
     const ms=H.time[i]*1000;if(ms<now-3600e3)continue;
@@ -292,9 +295,13 @@ function nightsFor(pl,wx,aqIdx,mode){
     h.s=hourScore(h,mode);(g[key]=g[key]||[]).push(h);
   }
   return Object.entries(g).filter(([,hs])=>hs.length>=3).slice(0,7).map(([key,hs])=>{
-    let best=-1,bi=0;for(let i=0;i<hs.length-1;i++){const v=(hs[i].s+hs[i+1].s)/2;if(v>best){best=v;bi=i;}}
-    const w=hs.slice(bi,bi+2);const wavg=k=>Math.round(w.reduce((a,h)=>a+h[k],0)/w.length);
-    return{key,hs,best:Math.round(best),bi,bestms:hs[bi].ms+3600e3,start:hs[bi].ms,end:hs[Math.min(bi+1,hs.length-1)].ms+3600e3,
+    /* Mejor tramo de «win» horas seguidas (toda la noche si win es mayor que la noche) */
+    const W=Math.max(1,Math.min(win,hs.length));let best=-1,bi=0;
+    for(let i=0;i+W<=hs.length;i++){let sum=0;for(let k=i;k<i+W;k++)sum+=hs[k].s;const v=sum/W;if(v>best){best=v;bi=i;}}
+    /* Racha más larga de horas buenas (puntuación >= thr) */
+    let run=0,gH=0,gS=0,gE=0,rs=0;hs.forEach((h,i)=>{if(h.s>=thr){if(!run)rs=i;run++;if(run>gH){gH=run;gS=hs[rs].ms;gE=h.ms+3600e3;}}else run=0;});
+    const w=hs.slice(bi,bi+W);const wavg=k=>Math.round(w.reduce((a,h)=>a+h[k],0)/w.length);
+    return{key,hs,W,best:Math.round(best),bi,bestms:hs[bi].ms+W*1800e3,start:hs[bi].ms,end:hs[bi+W-1].ms+3600e3,goodH:gH,goodS:gS,goodE:gE,dark:hs.length,
       cloud:wavg('total'),wind:wavg('wind'),rh:wavg('rh'),pp:Math.max(...hs.map(h=>h.pp)),
       illum:hs[Math.floor(hs.length/2)].illum,phase:hs[Math.floor(hs.length/2)].phase,moonUp:hs.filter(h=>h.malt>0).length,
       fog:w.some(h=>h.t-h.td<2),dust:w[0].dust==null?null:Math.round(Math.max(...w.map(h=>h.dust??0))),aod:w[0].aod==null?null:Math.max(...w.map(h=>h.aod??0)),
@@ -357,7 +364,7 @@ const fmtHO=(ms,off)=>{const d=new Date(ms+off*1000);return String(d.getUTCHours
 const $=id=>document.getElementById(id);
 function load(k,d){try{const v=localStorage.getItem('cn_'+k);return v?JSON.parse(v):d}catch(_){return d}}
 function save(k,v){try{localStorage.setItem('cn_'+k,JSON.stringify(v))}catch(_){}}
-let avisos=load('avisos',{noche:true,atardecer:true,amanecer:true,tormentas:true}),favs=load('favs',[]),umbral=load('umbral',70),topic=load('topic',null),aqIdx={},place=load('place',null),wx=null,nights=[],sel=0,mode=load('mode','deep');
+let ventana=load('ventana',2),avisos=load('avisos',{noche:true,atardecer:true,amanecer:true,tormentas:true}),favs=load('favs',[]),umbral=load('umbral',70),topic=load('topic',null),aqIdx={},place=load('place',null),wx=null,nights=[],sel=0,mode=load('mode','deep');
 let sats=load('sats',[{id:25544,name:'ISS'},{id:48274,name:'Tiangong'},{id:20580,name:'Hubble'}]);
 const tleCache={};
 
@@ -496,9 +503,9 @@ function confirmDel(btn){if(btn.dataset.sure)return true;btn.dataset.sure=1;btn.
   setTimeout(()=>{if(btn.isConnected){delete btn.dataset.sure;btn.textContent='✕';btn.removeAttribute('style');}},3000);return false;}
 /* Tarjeta: esta noche en todos tus sitios */
 const favCache={};
-async function favNights(f){const k=f.lat+','+f.lng+','+mode,c=favCache[k];
+async function favNights(f){const k=f.lat+','+f.lng+','+mode+','+ventana+','+umbral,c=favCache[k];
   if(c&&Date.now()-c.t<30*60e3)return c;
-  const {wx:w,aqIdx:a}=await getForecast(f);return favCache[k]={t:Date.now(),n:nightsFor(f,w,a,mode),off:w.utc_offset_seconds};}
+  const {wx:w,aqIdx:a}=await getForecast(f);return favCache[k]={t:Date.now(),n:nightsFor(f,w,a,mode,ventana,umbral),off:w.utc_offset_seconds};}
 async function fillFavCard(){
   const el=$('favcard');if(!el)return;
   el.innerHTML='<h3>⭐ Tus sitios</h3>'+favs.map((f,i)=>`<div class="row" data-fi="${i}" style="cursor:pointer"><div class="tx"><b>${esc(f.name)}</b><span id="fv${i}">calculando…</span></div><span class="badge n" id="fb${i}">…</span></div>`).join('');
@@ -514,13 +521,15 @@ if(!topic){topic='charcosyespuma-'+Math.random().toString(36).slice(2,10);save('
 const APP_URL=location.protocol.startsWith('http')?location.href.split('#')[0]:'';
 const AVT=[['noche','✨ Noches buenas'],['atardecer','🌅 Atardeceres'],['amanecer','🌄 Amaneceres'],['tormentas','⚡ Tormentas']];
 function paintAv(){$('avtypes').innerHTML=AVT.map(([k,t])=>`<button class="chip" data-av="${k}" style="${avisos[k]?'background:rgba(63,214,154,.22);color:#fff':'opacity:.55'}">${avisos[k]?'✓ ':''}${t}</button>`).join('');}
-function paintCfg(){paintAv();
+function paintVentana(){[...$('ventana').children].forEach(b=>b.classList.toggle('on',+b.dataset.v===ventana));}
+function paintCfg(){paintAv();paintVentana();
   $('topic').value=topic;
   [...$('umbral').children].forEach(b=>b.classList.toggle('on',+b.dataset.u===umbral));
-  $('cfg').value=JSON.stringify({topic,umbral,avisos,modo:mode,app:APP_URL,sitios:favs.map(f=>({name:f.name,lat:f.lat,lng:f.lng}))},null,1);
+  $('cfg').value=JSON.stringify({topic,umbral,ventana,avisos,modo:mode,app:APP_URL,sitios:favs.map(f=>({name:f.name,lat:f.lat,lng:f.lng}))},null,1);
 }
+$('ventana').onclick=e=>{const v=e.target.closest('[data-v]')?.dataset.v;if(!v)return;ventana=+v;save('ventana',ventana);paintCfg();schedulePush();if(wx){build();render();}};
 $('avtypes').onclick=e=>{const k=e.target.closest('[data-av]')?.dataset.av;if(!k)return;avisos[k]=!avisos[k];save('avisos',avisos);paintCfg();schedulePush();};
-$('umbral').onclick=e=>{const u=e.target.closest('button')?.dataset.u;if(!u)return;umbral=+u;save('umbral',umbral);paintCfg();schedulePush();};
+$('umbral').onclick=e=>{const u=e.target.closest('button')?.dataset.u;if(!u)return;umbral=+u;save('umbral',umbral);paintCfg();schedulePush();if(wx){build();render();}};
 async function copyText(id){const el=$(id);el.select();try{await navigator.clipboard.writeText(el.value);}catch(_){try{document.execCommand('copy');}catch(__){}}}
 $('copytopic').onclick=()=>copyText('topic');
 $('topic').onchange=()=>{const v=$('topic').value.trim();if(/^[A-Za-z0-9_-]{6,64}$/.test(v)){topic=v;save('topic',v);schedulePush();}paintCfg();};
@@ -648,7 +657,7 @@ let ghToken=load('ghtoken',''),ghSha=null,ghSynced=load('synced',false),syncMsg=
 const b64e=t=>btoa(unescape(encodeURIComponent(t))),b64d=t=>decodeURIComponent(escape(atob(t.replace(/\s/g,''))));
 const ghUrl=()=>`https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/sitios.json`;
 const ghHead=()=>Object.assign({Accept:'application/vnd.github+json'},ghToken?{Authorization:'Bearer '+ghToken}:{});
-const cfgObj=()=>({topic,umbral,avisos,modo:mode,app:APP_URL,sitios:favs.map(f=>({name:f.name,lat:f.lat,lng:f.lng}))});
+const cfgObj=()=>({topic,umbral,ventana,avisos,modo:mode,app:APP_URL,sitios:favs.map(f=>({name:f.name,lat:f.lat,lng:f.lng}))});
 async function ghGet(){const r=await fetch(ghUrl(),{headers:ghHead(),cache:'no-store'});
   if(r.status===404)return{data:null,sha:null};if(r.status===401)throw new Error('token');if(!r.ok)throw new Error('GitHub '+r.status);
   const j=await r.json();let data=null;try{data=JSON.parse(b64d(j.content));}catch(_){}return{data,sha:j.sha};}
@@ -661,6 +670,7 @@ async function syncPull(){
       else{rf.forEach(f=>{if(!favs.some(x=>same(x,f)))favs.push(f);});}  // primera vez: se juntan los dos
       if(data.topic&&/^[A-Za-z0-9_-]{6,64}$/.test(data.topic)&&!/PEGA/i.test(data.topic))topic=data.topic;
       if(data.umbral)umbral=+data.umbral;
+      if(data.ventana){ventana=+data.ventana;save('ventana',ventana);}
       if(data.avisos&&typeof data.avisos==='object'){avisos=Object.assign({noche:true,atardecer:true,amanecer:true,tormentas:true},data.avisos);save('avisos',avisos);}
       save('favs',favs);save('topic',topic);save('umbral',umbral);paintFavs();if(wx)render();}
     if(ghToken&&!ghSynced){await syncPush(true);ghSynced=true;save('synced',true);}
@@ -739,7 +749,7 @@ async function getTLE(id){
 
 /* ===== Noches ===== */
 const fmtH=ms=>{const d=new Date(ms+wx.utc_offset_seconds*1000);return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');};
-function build(){nights=nightsFor(place,wx,aqIdx,mode);}
+function build(){nights=nightsFor(place,wx,aqIdx,mode,ventana,umbral);}
 function dayLabel(key,i){if(i===0&&key===new Date(Date.now()+wx.utc_offset_seconds*1000-12*3600e3).toISOString().slice(0,10))return'Hoy';
   const d=new Date(key+'T12:00:00Z');return d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric',timeZone:'UTC'});}
 const dustIcon=(px=22)=>`<svg width="${px}" height="${px}" viewBox="0 0 24 24" style="vertical-align:middle" aria-label="calima"><g fill="none" stroke="#f0a14a" stroke-width="2.2" stroke-linecap="round"><path d="M3 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M3 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0" opacity=".8"/></g><g fill="#d9853b"><circle cx="5" cy="18" r="1.3"/><circle cx="10" cy="19.5" r="1.1"/><circle cx="15" cy="18" r="1.3"/><circle cx="19.5" cy="19.5" r="1"/><circle cx="12" cy="3.5" r="1"/><circle cx="18" cy="4" r="1.2"/></g></svg>`;
@@ -798,7 +808,8 @@ function render(){
     <div class="when">${sel===0?'ESTA NOCHE':longDay.toUpperCase()}</div>
     <div class="ring" style="--p:${n.best};--c:${c}"><div><b style="color:${c}">${n.best}</b><small>de 100</small></div></div>
     <div class="verdict">${v1}</div>
-    <div class="window">${v2} · mejor hora <b>${fmtH(n.start)}–${fmtH(n.end)}</b></div>
+    <div class="window">${v2} · ${n.W>=n.dark?'toda la noche':'mejor tramo de '+n.W+' h'} <b>${fmtH(n.start)}–${fmtH(n.end)}</b></div>
+    <div class="window" style="margin-top:4px">🕒 ${n.goodH?`<b>${n.goodH} h buenas seguidas</b> (${fmtH(n.goodS)}–${fmtH(n.goodE)}) de ${n.dark} h de noche`:`Ninguna hora llega a ${umbral}`}</div>
     <div class="stats">
       <div class="stat"><i>☁️</i><b>${n.cloud}%</b><span>nubes</span></div>
       <div class="stat"><i>${moonEmoji(n.phase)}</i><b>${Math.round(n.illum*100)}%</b><span>${n.moonUp?'luna '+n.moonUp+' h':'sin luna'}</span></div>
@@ -818,7 +829,7 @@ function render(){
 
   <section class="card">
     <h3>Hora a hora</h3>
-    <div class="hours">${hs.map((h,i)=>`<div class="${i===n.bi||i===n.bi+1?'best':''}" style="height:${Math.max(8,h.s*0.7)}px;background:${col(h.s)}" title="${fmtH(h.ms)} · ${h.s}"></div>`).join('')}</div>
+    <div class="hours">${hs.map((h,i)=>`<div class="${i>=n.bi&&i<n.bi+n.W?'best':''}" style="height:${Math.max(8,h.s*0.7)}px;background:${col(h.s)}" title="${fmtH(h.ms)} · ${h.s}"></div>`).join('')}</div>
     <div class="hl">${hs.filter((_,i)=>i%labelStep===0).map(h=>`<span>${fmtH(h.ms)}</span>`).join('')}</div>
     <div class="legend"><span><i style="background:var(--good)"></i>buena</span><span><i style="background:var(--ok)"></i>regular</span><span><i style="background:var(--bad)"></i>mala</span></div>
   </section>
