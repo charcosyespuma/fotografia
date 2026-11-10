@@ -1,4 +1,4 @@
-  name: Aviso de buena noche
+name: Aviso de buena noche
 on:
   schedule:
     - cron: '0 8 * * *'    # mañana: atardecer y tormentas del día
