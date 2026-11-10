@@ -1,14 +1,15 @@
 {
  "topic": "charcosyespuma-6clb74v5",
  "umbral": 70,
+ "avisos": {
+  "noche": true,
+  "atardecer": true,
+  "amanecer": true,
+  "tormentas": true
+ },
  "modo": "deep",
  "app": "https://charcosyespuma.github.io/fotografia/",
  "sitios": [
-  {
-   "name": "Acusa Candelaria",
-   "lat": 28.0104,
-   "lng": -15.6819
-  },
   {
    "name": "Bailicos",
    "lat": 27.9594,
