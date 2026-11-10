@@ -54,6 +54,11 @@
    "name": "Salinas de Tenefé",
    "lat": 27.8146,
    "lng": -15.422
+  },
+  {
+   "name": "El Bufadero de La Garita",
+   "lat": 28.0028,
+   "lng": -15.3749
   }
  ]
 }
