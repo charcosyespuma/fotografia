@@ -172,7 +172,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
   <!-- Ajustes -->
   <section class="card hidden" id="settings">
-    <h3>Ajustes</h3>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><button id="setback" class="iconbtn" style="width:34px;height:34px;font-size:16px">←</button><h3 style="margin:0">Ajustes</h3></div>
     <div class="sub" style="margin-top:0">Tipo de fotografía</div>
     <div class="seg" id="mode">
       <button data-m="deep">🌌 Vía Láctea</button>
@@ -180,6 +180,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     </div>
     <div class="note" style="margin-top:6px">En «Vía Láctea» la Luna penaliza mucho; en «Paisaje» casi no cuenta.</div>
     <div class="set"><span>Modo rojo (visión nocturna)</span><button class="toggle" id="redtog"></button></div>
+    <div class="sub">🔄 Sincronizar móvil y ordenador</div>
+    <div id="syncbox"></div>
     <div class="sub">⭐ Mis sitios</div>
     <div id="favlist"><span class="note">Aún no has guardado ninguno. Elige un lugar y toca ☆ arriba.</span></div>
     <div class="sub">🔔 Avisos al móvil</div>
@@ -189,13 +191,14 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="seg" id="umbral" style="margin-top:6px"><button data-u="60">60</button><button data-u="70">70</button><button data-u="80">80</button></div>
     <div class="addsat"><button id="testntfy" style="flex:1;padding:10px">📨 Probar aviso</button></div>
     <div class="note" id="ntfymsg" style="margin-top:6px"></div>
-    <div class="note" style="margin-top:8px">Para los avisos automáticos de cada tarde, copia esta configuración en el archivo <b>sitios.json</b> de GitHub:</div>
+    <details style="margin-top:10px"><summary class="note" style="cursor:pointer">Configuración manual (solo si no usas la sincronización)</summary>
+    <div class="note" style="margin-top:8px">Copia esto en el archivo <b>sitios.json</b> de GitHub:</div>
     <textarea id="cfg" readonly style="width:100%;height:90px;margin-top:6px;font:11px monospace;color:var(--mute);background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:10px;padding:8px"></textarea>
-    <div class="addsat"><button id="copycfg" style="flex:1;padding:10px">Copiar configuración</button></div>
+    <div class="addsat"><button id="copycfg" style="flex:1;padding:10px">Copiar configuración</button></div></details>
     <div class="sub">🛰️ Satélites que se calculan</div>
     <div id="satlist"></div>
     <div class="addsat"><input id="norad" inputmode="numeric" placeholder="Nº NORAD (ej. 25544)"><button id="addsat">Añadir</button></div>
-    <div class="note" style="margin-top:12px">Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de 2 h.<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
+    <div class="note" style="margin-top:12px">Versión 2026-11-10 · sincronización<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de 2 h.<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
   </section>
 
   <div id="monthview" class="hidden"></div>
@@ -397,10 +400,18 @@ $('geo').onclick=()=>{
     $('results').innerHTML='';if(map){map.setView([lat,lng],12);setMarker(lat,lng);}setPlace({name:await placeName(lat,lng),lat,lng});},
     err=>{$('results').innerHTML=err&&err.code===1?`<li style="cursor:default;line-height:1.5"><b>📍 Permiso de ubicación denegado</b><br><span style="color:var(--mute)">Toca el candado 🔒 junto a la dirección (o ⋮ → Información del sitio) → Permisos → Ubicación → Permitir. Comprueba también que la ubicación del móvil está activada.</span></li>`
       :`<li style="cursor:default;line-height:1.5"><b>📍 No se pudo obtener tu posición</b><br><span style="color:var(--mute)">Activa la ubicación del móvil e inténtalo de nuevo, o toca tu sitio en el mapa.</span></li>`;},{enableHighAccuracy:true,timeout:15000});};
-$('locbtn').onclick=()=>{showPicker($('picker').classList.contains('hidden'));$('settings').classList.add('hidden');};
-$('setbtn').onclick=()=>{$('settings').classList.toggle('hidden');};
+/* Pantallas: principal, calendario del mes y ajustes (cada una ocupa la pantalla sola) */
+let view='main';
+function setView(v){view=v;mView=v==='month';
+  $('app').classList.toggle('hidden',v!=='main');$('monthview').classList.toggle('hidden',v!=='month');$('settings').classList.toggle('hidden',v!=='settings');
+  if(v!=='main')showPicker(false);
+  $('monbtn').style.background=v==='month'?'rgba(143,179,255,.3)':'';$('setbtn').style.background=v==='settings'?'rgba(143,179,255,.3)':'';
+  window.scrollTo({top:0});if(v==='month')renderMonth();if(v==='main'&&wx)setTimeout(()=>satMap&&satMap.invalidateSize(),50);}
+$('locbtn').onclick=()=>{if(view!=='main'){setView('main');showPicker(true);}else showPicker($('picker').classList.contains('hidden'));};
+$('setbtn').onclick=()=>setView(view==='settings'?'main':'settings');
+$('setback').onclick=()=>setView('main');
 
-function setPlace(p){if(mView){mView=false;$('monthview').classList.add('hidden');$('app').classList.remove('hidden');$('monbtn').style.background='';}place=p;save('place',p);$('locname').textContent=p.name;showPicker(false);window.scrollTo({top:0,behavior:'smooth'});fetchWeather();}
+function setPlace(p){if(view!=='main')setView('main');place=p;save('place',p);$('locname').textContent=p.name;showPicker(false);window.scrollTo({top:0,behavior:'smooth'});fetchWeather();}
 
 /* ===== Sitios guardados ===== */
 const same=(a,b)=>a&&b&&Math.abs(a.lat-b.lat)<1e-3&&Math.abs(a.lng-b.lng)<1e-3;
@@ -416,15 +427,15 @@ function paintFavs(){
 }
 $('favbtn').onclick=()=>{if(!place)return;const i=favs.findIndex(f=>same(f,place));
   if(i>=0)favs.splice(i,1);else favs.push({name:place.name,lat:place.lat,lng:place.lng});
-  save('favs',favs);paintFavs();if(wx)render();};
+  save('favs',favs);paintFavs();if(wx)render();schedulePush();};
 $('favchips').onclick=e=>{const i=e.target.closest('[data-fi]')?.dataset.fi;if(i!=null)pick(favs[+i]);};
 $('favlist').onclick=e=>{const d=e.target.dataset||{};
-  if(d.fd!=null){if(!confirmDel(e.target))return;favs.splice(+d.fd,1);save('favs',favs);paintFavs();if(wx)render();return;}
+  if(d.fd!=null){if(!confirmDel(e.target))return;favs.splice(+d.fd,1);save('favs',favs);paintFavs();if(wx)render();schedulePush();return;}
   if(d.fe!=null){const i=+d.fe,row=e.target.closest('.favrow');
     row.innerHTML=`<input class="fedit" value="${esc(favs[i].name)}" maxlength="40"><button class="fok">✓</button>`;
     const inp=row.querySelector('input');inp.focus();inp.select();
     const ok=()=>{const v=inp.value.trim();if(v){const old=favs[i];if(same(old,place)){place.name=v;save('place',place);$('locname').textContent=v;}
-        old.name=v;save('favs',favs);}paintFavs();if(wx)render();if(mView)renderMonth();};
+        old.name=v;save('favs',favs);schedulePush();}paintFavs();if(wx)render();if(mView)renderMonth();};
     row.querySelector('.fok').onclick=ok;inp.onkeydown=ev=>{if(ev.key==='Enter')ok();if(ev.key==='Escape')paintFavs();};}
 };
 /* Borrar pide un segundo toque para evitar sustos */
@@ -453,10 +464,10 @@ function paintCfg(){
   [...$('umbral').children].forEach(b=>b.classList.toggle('on',+b.dataset.u===umbral));
   $('cfg').value=JSON.stringify({topic,umbral,modo:mode,app:APP_URL,sitios:favs.map(f=>({name:f.name,lat:f.lat,lng:f.lng}))},null,1);
 }
-$('umbral').onclick=e=>{const u=e.target.closest('button')?.dataset.u;if(!u)return;umbral=+u;save('umbral',umbral);paintCfg();};
+$('umbral').onclick=e=>{const u=e.target.closest('button')?.dataset.u;if(!u)return;umbral=+u;save('umbral',umbral);paintCfg();schedulePush();};
 async function copyText(id){const el=$(id);el.select();try{await navigator.clipboard.writeText(el.value);}catch(_){try{document.execCommand('copy');}catch(__){}}}
 $('copytopic').onclick=()=>copyText('topic');
-$('topic').onchange=()=>{const v=$('topic').value.trim();if(/^[A-Za-z0-9_-]{6,64}$/.test(v)){topic=v;save('topic',v);}paintCfg();};
+$('topic').onchange=()=>{const v=$('topic').value.trim();if(/^[A-Za-z0-9_-]{6,64}$/.test(v)){topic=v;save('topic',v);schedulePush();}paintCfg();};
 $('copycfg').onclick=()=>{copyText('cfg');$('copycfg').textContent='✓ Copiada';setTimeout(()=>$('copycfg').textContent='Copiar configuración',2000);};
 $('testntfy').onclick=async()=>{
   $('ntfymsg').textContent='Enviando…';
@@ -572,12 +583,68 @@ function bindMonthNav(places){
   const mt=$('mtarget');if(mt)mt.onclick=e=>{const t=e.target.closest('[data-t]')?.dataset.t;if(t){mTarget=t;save('mtarget',t);renderMonth();}};
   const mp=$('mplaces');if(mp)mp.onclick=e=>{const i=e.target.closest('[data-mp]')?.dataset.mp;if(i!=null){mPlace=places[+i];renderMonth();}};
 }
-$('monbtn').onclick=()=>{mView=!mView;$('monthview').classList.toggle('hidden',!mView);$('app').classList.toggle('hidden',mView);
-  $('monbtn').style.background=mView?'rgba(143,179,255,.3)':'';showPicker(false);$('settings').classList.add('hidden');if(mView)renderMonth();};
+$('monbtn').onclick=()=>setView(view==='month'?'main':'month');
+
+/* ===== Sincronización con GitHub (sitios.json del propio repositorio) ===== */
+const GH=(()=>{const h=location.hostname.match(/^([^.]+)\.github\.io$/i);if(!h)return null;
+  const repo=location.pathname.split('/').filter(Boolean)[0];return repo?{owner:h[1],repo}:null;})();
+let ghToken=load('ghtoken',''),ghSha=null,ghSynced=load('synced',false),syncMsg='',pushTimer=null;
+const b64e=t=>btoa(unescape(encodeURIComponent(t))),b64d=t=>decodeURIComponent(escape(atob(t.replace(/\s/g,''))));
+const ghUrl=()=>`https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/sitios.json`;
+const ghHead=()=>Object.assign({Accept:'application/vnd.github+json'},ghToken?{Authorization:'Bearer '+ghToken}:{});
+const cfgObj=()=>({topic,umbral,modo:mode,app:APP_URL,sitios:favs.map(f=>({name:f.name,lat:f.lat,lng:f.lng}))});
+async function ghGet(){const r=await fetch(ghUrl(),{headers:ghHead(),cache:'no-store'});
+  if(r.status===404)return{data:null,sha:null};if(r.status===401)throw new Error('token');if(!r.ok)throw new Error('GitHub '+r.status);
+  const j=await r.json();let data=null;try{data=JSON.parse(b64d(j.content));}catch(_){}return{data,sha:j.sha};}
+function setSync(t){syncMsg=t;paintSync();}
+async function syncPull(){
+  if(!GH)return;setSync('⏳ Sincronizando…');
+  try{const {data,sha}=await ghGet();ghSha=sha;
+    if(data){const rf=Array.isArray(data.sitios)?data.sitios:[];
+      if(ghToken&&ghSynced){favs=rf;}                         // ya sincronizado: manda GitHub
+      else{rf.forEach(f=>{if(!favs.some(x=>same(x,f)))favs.push(f);});}  // primera vez: se juntan los dos
+      if(data.topic&&/^[A-Za-z0-9_-]{6,64}$/.test(data.topic)&&!/PEGA/i.test(data.topic))topic=data.topic;
+      if(data.umbral)umbral=+data.umbral;
+      save('favs',favs);save('topic',topic);save('umbral',umbral);paintFavs();if(wx)render();}
+    if(ghToken&&!ghSynced){await syncPush(true);ghSynced=true;save('synced',true);}
+    setSync(ghToken?'✓ Sincronizado':'👁️ Leyendo tus sitios de GitHub. Para guardar cambios desde aquí, conecta este dispositivo.');
+  }catch(e){setSync(e.message==='token'?'⚠️ La clave de GitHub no es válida o ha caducado.':'⚠️ No se pudo sincronizar ('+e.message+').');}
+}
+function schedulePush(){if(!GH||!ghToken)return;clearTimeout(pushTimer);setSync('⏳ Guardando…');pushTimer=setTimeout(()=>syncPush(),1200);}
+async function syncPush(first,retry){
+  if(!GH||!ghToken)return;
+  try{const body={message:first?'Sincronizar sitios desde la app':'Actualizar sitios desde la app',content:b64e(JSON.stringify(cfgObj(),null,1)+'\n')};
+    if(ghSha)body.sha=ghSha;
+    const r=await fetch(ghUrl(),{method:'PUT',headers:Object.assign({'Content-Type':'application/json'},ghHead()),body:JSON.stringify(body)});
+    if((r.status===409||r.status===422)&&!retry){ghSha=(await ghGet()).sha;return syncPush(first,true);}
+    if(r.status===401||r.status===403)throw new Error('token');
+    if(!r.ok)throw new Error('GitHub '+r.status);
+    ghSha=(await r.json()).content.sha;setSync('✓ Guardado en GitHub');
+  }catch(e){setSync(e.message==='token'?'⚠️ La clave no tiene permiso para guardar (revisa «Contents: Read and write»).':'⚠️ No se pudo guardar ('+e.message+').');}
+}
+function paintSync(){
+  const box=$('syncbox');if(!box)return;
+  if(!GH){box.innerHTML='<div class="note">Solo funciona abriendo la app desde tu web de GitHub (charcosyespuma.github.io/…).</div>';return;}
+  box.innerHTML=ghToken?`<div class="note">${syncMsg||'✓ Conectado'}</div>
+      <div class="addsat"><button id="syncnow" style="flex:1;padding:10px">🔄 Sincronizar ahora</button><button id="ghout">Desconectar</button></div>`
+    :`<div class="note">${syncMsg?syncMsg+'<br>':''}Para que móvil y ordenador compartan los sitios, conecta cada dispositivo una vez con una clave de GitHub:<br>
+      1. Abre <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com → crear clave (fine-grained token)</a>.<br>
+      2. Nombre: <i>El Tiempo Esta Noche</i>. Caducidad: la más larga que te deje.<br>
+      3. <b>Repository access</b> → <i>Only select repositories</i> → <b>${GH.repo}</b>.<br>
+      4. <b>Permissions</b> → <b>Contents</b> → <i>Read and write</i>.<br>
+      5. Pulsa <b>Generate token</b>, cópiala y pégala aquí:</div>
+      <div class="addsat"><input id="ghtok" placeholder="github_pat_…" spellcheck="false" autocapitalize="off"><button id="ghin">Conectar</button></div>`;
+  const now=$('syncnow');if(now)now.onclick=()=>{ghSynced=true;syncPull();};
+  const out=$('ghout');if(out)out.onclick=()=>{ghToken='';save('ghtoken','');ghSynced=false;save('synced',false);syncMsg='';paintSync();};
+  const inb=$('ghin');if(inb)inb.onclick=async()=>{const v=$('ghtok').value.trim();if(!v)return;ghToken=v;
+    try{const r=await fetch(`https://api.github.com/repos/${GH.owner}/${GH.repo}`,{headers:ghHead()});const j=await r.json();
+      if(!r.ok||!j.permissions?.push)throw 0;}catch(_){ghToken='';setSync('⚠️ Esa clave no sirve para este repositorio. Revisa los pasos 3 y 4.');return;}
+    save('ghtoken',ghToken);ghSynced=false;save('synced',false);syncMsg='';syncPull();};
+}
 
 /* ===== Ajustes ===== */
 function paintMode(){[...$('mode').children].forEach(b=>b.classList.toggle('on',b.dataset.m===mode));}
-$('mode').onclick=e=>{const m=e.target.closest('button')?.dataset.m;if(!m)return;mode=m;save('mode',m);paintMode();paintCfg();if(wx){build();render();}};
+$('mode').onclick=e=>{const m=e.target.closest('button')?.dataset.m;if(!m)return;mode=m;save('mode',m);paintMode();paintCfg();schedulePush();if(wx){build();render();}};
 function setRed(on){document.body.classList.toggle('red',on);$('redtog').classList.toggle('on',on);save('red',on);}
 $('redbtn').onclick=()=>setRed(!document.body.classList.contains('red'));
 $('redtog').onclick=()=>setRed(!document.body.classList.contains('red'));
@@ -714,7 +781,8 @@ function findPasses(t,t0,t1){
 }
 
 /* ===== Inicio ===== */
-paintMode();paintSats();paintFavs();setRed(load('red',false));
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&GH)syncPull();});
+paintMode();paintSats();paintFavs();paintSync();syncPull();setRed(load('red',false));
 if(place){$('locname').textContent=place.name;showPicker(false);fetchWeather();}
 else{showPicker(true);$('app').innerHTML='<div class="card empty"><div class="big">🔭</div><p><b>Elige dónde vas a fotografiar</b></p><p class="note">Busca un lugar, toca un punto del mapa o usa tu ubicación, y te diré si merece la pena salir esta noche.</p></div>';}
 </script>
