@@ -70,6 +70,11 @@
    "name": "Minas de San José",
    "lat": 28.2663,
    "lng": -16.5896
+  },
+  {
+   "name": "La Orotava",
+   "lat": 28.2158,
+   "lng": -16.6355
   }
  ]
 }
