@@ -1,9 +1,33 @@
 {
- "topic": "PEGA-AQUI-TU-TEMA",
+ "topic": "charcosyespuma-6clb74v5",
  "umbral": 70,
  "modo": "deep",
- "app": "",
+ "app": "https://charcosyespuma.github.io/fotografia/",
  "sitios": [
-  {"name": "Acusa Seca", "lat": 28.0312, "lng": -15.6953}
+  {
+   "name": "Acusa Candelaria",
+   "lat": 28.0104,
+   "lng": -15.6819
+  },
+  {
+   "name": "Bailicos",
+   "lat": 27.9594,
+   "lng": -15.5916
+  },
+  {
+   "name": "Mirador Tejeda Bentayga",
+   "lat": 28.0102,
+   "lng": -15.624
+  },
+  {
+   "name": "Los Marteles",
+   "lat": 27.9666,
+   "lng": -15.5614
+  },
+  {
+   "name": "Acusa Seca",
+   "lat": 28.0312,
+   "lng": -15.6953
+  }
  ]
 }
