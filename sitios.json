@@ -1,6 +1,7 @@
 {
  "topic": "charcosyespuma-6clb74v5",
  "umbral": 70,
+ "ventana": 6,
  "avisos": {
   "noche": true,
   "atardecer": true,
