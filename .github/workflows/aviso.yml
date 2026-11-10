@@ -1,8 +1,9 @@
    name: Aviso de buena noche
    on:
      schedule:
-       - cron: '0 17 * * *'   # 17:00 UTC = 17:00 en Canarias en invierno, 18:00 en verano
-     workflow_dispatch:        # botón "Run workflow" para probarlo a mano
+       - cron: '0 8 * * *'    # mañana: atardecer y tormentas del día
+       - cron: '0 17 * * *'   # tarde: noche, amanecer de mañana y tormentas
+     workflow_dispatch:
    jobs:
      aviso:
        runs-on: ubuntu-latest
@@ -12,3 +13,5 @@
            with:
              node-version: 20
          - run: node aviso.mjs
+           env:
+             MOMENTO: ${{ github.event_name == 'workflow_dispatch' && 'todo' || '' }}
