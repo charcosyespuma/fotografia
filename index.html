@@ -222,7 +222,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="sub" data-i18n>🛰️ Satélites que se calculan</div>
     <div id="satlist"></div>
     <div class="addsat"><input id="norad" inputmode="numeric" data-i18n-ph placeholder="Nº NORAD (ej. 25544)"><button id="addsat" data-i18n>Añadir</button></div>
-    <div class="note" style="margin-top:12px">Versión 2026-11-12d · idiomas · animación de nubes · cuentas · atardeceres y tormentas<br><span data-i18n>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).</span><br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
+    <div class="note" style="margin-top:12px">Versión 2026-11-12e · idiomas · animación de nubes · cuentas · atardeceres y tormentas<br><span data-i18n>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).</span><br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
   </section>
 
   <section class="card hidden" id="auth">
@@ -406,9 +406,13 @@ const tleCache={};
 
 /* ===== Mapa ===== */
 /* Imagen infrarroja de Meteosat (EUMETSAT, última disponible, cada 10 min) */
-function cloudLayer(){
+/* Realce: el infrarrojo sale muy gris; más contraste y brillo, y fundido «trama» sobre el mapa para que se vean islas, costa y nubes */
+const CLOUD_FX='contrast(1.5) brightness(1.5)';
+function cloudPanes(m){m.createPane('nubes');const np=m.getPane('nubes');np.style.zIndex=250;np.style.pointerEvents='none';np.style.filter=CLOUD_FX;np.style.mixBlendMode='screen';
+  m.createPane('etiq');const ep=m.getPane('etiq');ep.style.zIndex=260;ep.style.pointerEvents='none';}
+function cloudLayer(pane){
   const l=L.tileLayer.wms('https://view.eumetsat.int/geoserver/wms',{layers:'mtg_fd:ir105_hrfi',format:'image/png',transparent:true,
-    version:'1.3.0',opacity:.6,attribution:'© EUMETSAT',_t:Math.floor(Date.now()/180e3)});
+    version:'1.3.0',opacity:.6,attribution:'© EUMETSAT',_t:Math.floor(Date.now()/180e3),pane:pane||'tilePane'});
   return l;}
 setInterval(()=>{if(wx&&satMap&&!animTimer&&!animLoading)drawSatMap();},180e3);
 let satMap=null,animTimer=null,animLayers=[],baseCloud=null;
@@ -422,7 +426,7 @@ let animLoading=0,animCache={key:'',frames:[]};
 function setSatTime(x){const tl=$('sattime');if(tl)tl.textContent=x;}
 function stopAnim(){animLoading=0;if(animTimer){clearInterval(animTimer);animTimer=null;}
   animLayers.forEach(l=>satMap&&satMap.removeLayer(l));animLayers=[];
-  if(baseCloud)baseCloud.setOpacity(.85);
+  if(baseCloud)baseCloud.setOpacity(1);
   const b=$('satplay');if(b)b.textContent=t('▶ Ver últimas 3 horas');
   setSatTime(t('Última imagen disponible · se comprueba cada 3 min'));}
 async function toggleAnim(){
@@ -448,10 +452,10 @@ async function toggleAnim(){
     animCache={key,frames};
   }
   if(frames.length<2){stopAnim();setSatTime(t('No se pudieron cargar las imágenes. Prueba más tarde.'));return;}
-  animLayers=frames.map(f=>L.imageOverlay(f.url,bd,{opacity:0,interactive:false}).addTo(satMap));
+  animLayers=frames.map(f=>L.imageOverlay(f.url,bd,{opacity:0,interactive:false,pane:'nubes'}).addTo(satMap));
   if(baseCloud)baseCloud.setOpacity(0);
   let i=0,hold=0;
-  const show=()=>{animLayers.forEach((l,j)=>l.setOpacity(j===i?.85:0));setSatTime(satLabel(frames[i].ms));};
+  const show=()=>{animLayers.forEach((l,j)=>l.setOpacity(j===i?1:0));setSatTime(satLabel(frames[i].ms));};
   show();animLoading=0;
   animTimer=setInterval(()=>{if(i===frames.length-1&&hold<4){hold++;return;}hold=0;i=(i+1)%frames.length;show();},500);
 }
@@ -461,10 +465,10 @@ function drawSatMap(){
   const el=$('satmap');if(!el||typeof L==='undefined')return;
   satMap=L.map(el,{zoomControl:false,attributionControl:true}).setView([place.lat,place.lng],7);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,attribution:'© Esri'}).addTo(satMap);
-  const c=cloudLayer();c.setOpacity(.85);c.addTo(satMap);baseCloud=c;
+  cloudPanes(satMap);const c=cloudLayer('nubes');c.setOpacity(1);c.addTo(satMap);baseCloud=c;
   const b=$('satplay');if(b){b.onclick=toggleAnim;b.textContent=t('▶ Ver últimas 3 horas');}
   const tl=$('sattime');if(tl)tl.textContent=t('Última imagen disponible · se comprueba cada 3 min');
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{maxZoom:16}).addTo(satMap);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,pane:'etiq'}).addTo(satMap);
   L.circleMarker([place.lat,place.lng],{radius:7,color:'#fff',weight:2,fillColor:'#ff6b57',fillOpacity:1}).addTo(satMap);
   L.control.zoom({position:'bottomright'}).addTo(satMap);
 }
