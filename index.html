@@ -116,6 +116,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .toggle{width:48px;height:28px;border-radius:14px;background:rgba(255,255,255,.12);position:relative}
 .toggle::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.2s}
 .toggle.on{background:var(--good)}.toggle.on::after{left:23px}
+.nxrow{display:flex;gap:14px;margin-top:4px}
+.nx{display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.nx b{font-size:15px}
+.nx small{font-size:10.5px;color:var(--mute);text-transform:capitalize}
 .favrow{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.06);margin:4px 0}
 .favrow .fname{flex:1;font-size:14px}
 .favrow button{font-size:15px;padding:2px 6px}
@@ -203,7 +207,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="seg" id="umbral" style="margin-top:6px"><button data-u="60">60</button><button data-u="70">70</button><button data-u="80">80</button></div>
     <div class="note" style="margin-top:10px">4. Avisarme de:</div>
     <div class="chips" id="avtypes" style="margin-top:6px"></div>
-    <div class="note" style="margin-top:4px">Mañana (08:00): atardecer y tormentas del día · Tarde (17:00): noche, amanecer de mañana y tormentas de la noche.</div>
+    <div class="note" style="margin-top:4px">Mañana (08:00): noche de hoy, atardecer y tormentas · Tarde (17:00): noche, amanecer de mañana y tormentas.</div>
     <div class="addsat"><button id="testntfy" style="flex:1;padding:10px">📨 Probar aviso</button></div>
     <div class="note" id="ntfymsg" style="margin-top:6px"></div>
     <details style="margin-top:10px"><summary class="note" style="cursor:pointer">Configuración manual (solo si no usas la sincronización)</summary>
@@ -213,7 +217,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="sub">🛰️ Satélites que se calculan</div>
     <div id="satlist"></div>
     <div class="addsat"><input id="norad" inputmode="numeric" placeholder="Nº NORAD (ej. 25544)"><button id="addsat">Añadir</button></div>
-    <div class="note" style="margin-top:12px">Versión 2026-11-10h · cuentas · atardeceres y tormentas<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
+    <div class="note" style="margin-top:12px">Versión 2026-11-12 · cuentas · atardeceres y tormentas<br>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).<br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
   </section>
 
   <section class="card hidden" id="auth">
@@ -531,8 +535,9 @@ async function fillFavCard(){
   el.innerHTML='<h3>⭐ Tus sitios</h3>'+favs.map((f,i)=>`<div class="row" data-fi="${i}" style="cursor:pointer"><div class="tx"><b>${esc(f.name)}</b><span id="fv${i}">calculando…</span></div><span class="badge n" id="fb${i}">…</span></div>`).join('');
   el.onclick=e=>{const i=e.target.closest('[data-fi]')?.dataset.fi;if(i!=null)pick(favs[+i]);};
   favs.forEach(async(f,i)=>{try{const r=await favNights(f),t=r.n[0];if(!t)throw 0;
-      const next=r.n.slice(1,4).map(x=>`<b style="display:inline;color:${col(x.best)}">${x.best}</b>`).join(' · ');
-      $('fv'+i).innerHTML=`${fmtHO(t.start,r.off)}–${fmtHO(t.end,r.off)} · siguientes: ${next}`;
+      const wd=k=>new Date(k+'T12:00:00Z').toLocaleDateString('es-ES',{weekday:'short',timeZone:'UTC'}).replace('.','');
+      const next=r.n.slice(1,4).map(x=>`<span class="nx"><b style="color:${col(x.best)}">${x.best}</b><small>${wd(x.key)}</small></span>`).join('');
+      $('fv'+i).innerHTML=`Hoy ${fmtHO(t.start,r.off)}–${fmtHO(t.end,r.off)}<span class="nxrow">${next}</span>`;
       const b=$('fb'+i);b.textContent=t.best;b.className='badge';b.style.background='rgba(0,0,0,.25)';b.style.color=col(t.best);
     }catch(_){const v=$('fv'+i);if(v)v.textContent='sin datos';}});
 }

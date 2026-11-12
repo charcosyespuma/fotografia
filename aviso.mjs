@@ -1,6 +1,6 @@
 // El Tiempo Esta Noche · avisos diarios por ntfy
 // GitHub Actions lo ejecuta dos veces al día:
-//   mañana (08:00 UTC): atardecer de hoy y tormentas del día
+//   mañana (08:00 UTC): noche de hoy, atardecer de hoy y tormentas del día
 //   tarde  (17:00 UTC): noche de hoy, amanecer de mañana y tormentas de la noche
 // Lee sitios.json (lo mantiene la app) y usa el mismo cálculo que la app.
 import fs from 'node:fs';
@@ -171,7 +171,7 @@ const horiz=(pl,a,b)=>{const k=pl.lat.toFixed(3)+','+pl.lng.toFixed(3);if(!cache
 async function procesar(cfg){
   const umbral=cfg.umbral||70, modo=cfg.modo||'deep', ventana=cfg.ventana||2;
   const av=Object.assign({noche:true,atardecer:true,amanecer:true,tormentas:true},cfg.avisos||{});
-  const toca=k=>av[k]&&(momento==='todo'||(momento==='manana'?['atardecer','tormentas']:['noche','amanecer','tormentas']).includes(k));
+  const toca=k=>av[k]&&(momento==='todo'||(momento==='manana'?['noche','atardecer','tormentas']:['noche','amanecer','tormentas']).includes(k));
   if(!cfg.topic||/PEGA/i.test(cfg.topic)||!cfg.sitios?.length)return'sin tema o sin sitios';
   const items=[],manana=[];
   for(const pl of cfg.sitios){
