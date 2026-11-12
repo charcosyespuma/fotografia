@@ -94,7 +94,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .hours div.best{opacity:1;box-shadow:0 0 0 2px rgba(255,255,255,.5)}
 .hourbox{margin:16px 0 4px;text-align:left}
 .hourbox .hours{height:56px}
-.hl{display:flex;justify-content:space-between;color:var(--mute);font-size:11px;margin-top:6px}
+.hl{display:flex;gap:3px;color:var(--mute);font-size:11px;margin-top:6px}
+.hl span{flex:1;min-width:5px;text-align:center;white-space:nowrap;overflow:visible;display:flex;justify-content:center}
+.hl span:first-child{justify-content:flex-start}.hl span:last-child{justify-content:flex-end}
 .legend{display:flex;gap:12px;justify-content:center;margin-top:10px;font-size:11px;color:var(--mute)}
 .legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
 /* filas */
@@ -233,7 +235,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="sub" data-i18n>🛰️ Satélites que se calculan</div>
     <div id="satlist"></div>
     <div class="addsat"><input id="norad" inputmode="numeric" data-i18n-ph placeholder="Nº NORAD (ej. 25544)"><button id="addsat" data-i18n>Añadir</button></div>
-    <div class="note" style="margin-top:12px">Versión 2026-11-12g · idiomas · animación de nubes · cuentas · atardeceres y tormentas<br><span data-i18n>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).</span><br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
+    <div class="note" style="margin-top:12px">Versión 2026-11-12h · idiomas · animación de nubes · cuentas · atardeceres y tormentas<br><span data-i18n>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).</span><br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
   </section>
 
   <section class="card hidden" id="auth">
@@ -965,7 +967,7 @@ function render(){
   const mw=MW.map(([ic,nm,sb,r,d])=>{const w=mwWindow(r,d,t0,t1);return{ic,t:t(nm),s:t(sb),w};});
   if(mw[0].w||mw[2].w)alerts.push('<span class="pill good">'+t('🌌 Vía Láctea visible')+'</span>');
 
-  const hs=n.hs,labelStep=Math.ceil(hs.length/5);
+  const hs=n.hs,nl=Math.min(5,hs.length),lab=new Set(Array.from({length:nl},(_,k)=>Math.round(k*(hs.length-1)/Math.max(1,nl-1))));
   const up=(arr,min)=>arr.map(([nm,r,d])=>({nm,...radec(n.bestms,place.lat,place.lng,r,d)})).filter(p=>p.alt>=min).sort((a,b)=>b.alt-a.alt);
   const cs=up(CONST,25),os=up(OBJ,30);
   let passes=[];
@@ -981,7 +983,7 @@ function render(){
     <div class="window" style="margin-top:4px">🕒 ${n.goodH?`<b>${t('{h} h buenas seguidas',{h:n.goodH})}</b> (${fmtH(n.goodS)}–${fmtH(n.goodE)}) ${t('de {h} h de noche',{h:n.dark})}`:t('Ninguna hora llega a {x}',{x:umbral})}</div>
     <div class="hourbox">
     <div class="hours">${hs.map((h,i)=>`<div class="${i>=n.bi&&i<n.bi+n.W?'best':''}" style="height:${Math.max(6,h.s*0.56)}px;background:${col(h.s)}" title="${fmtH(h.ms)} · ${h.s}"></div>`).join('')}</div>
-    <div class="hl">${hs.filter((_,i)=>i%labelStep===0).map(h=>`<span>${fmtH(h.ms)}</span>`).join('')}</div>
+    <div class="hl">${hs.map((h,i)=>`<span>${lab.has(i)?fmtH(h.ms):''}</span>`).join('')}</div>
     <div class="legend"><span><i style="background:var(--good)"></i>${t('buena')}</span><span><i style="background:var(--ok)"></i>${t('regular')}</span><span><i style="background:var(--bad)"></i>${t('mala')}</span></div>
     </div>
     <div class="stats">
