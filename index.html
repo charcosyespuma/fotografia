@@ -222,7 +222,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="sub" data-i18n>🛰️ Satélites que se calculan</div>
     <div id="satlist"></div>
     <div class="addsat"><input id="norad" inputmode="numeric" data-i18n-ph placeholder="Nº NORAD (ej. 25544)"><button id="addsat" data-i18n>Añadir</button></div>
-    <div class="note" style="margin-top:12px">Versión 2026-11-12e · idiomas · animación de nubes · cuentas · atardeceres y tormentas<br><span data-i18n>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).</span><br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
+    <div class="note" style="margin-top:12px">Versión 2026-11-12f · idiomas · animación de nubes · cuentas · atardeceres y tormentas<br><span data-i18n>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).</span><br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
   </section>
 
   <section class="card hidden" id="auth">
@@ -421,43 +421,49 @@ function satTimes(hours,step){step=step||600e3;const end=Math.floor((Date.now()-
   for(let x=end-hours*3600e3+step;x<=end;x+=step)out.push(x);return out;}
 function satLabel(ms){const ago=Math.round((Date.now()-ms)/60000);
   return t('Imagen de las {h}',{h:fmtH(ms)})+' · '+t('hace {m} min',{m:ago});}
-/* Animación: una sola imagen por fotograma (toda la vista), precargadas antes de reproducir */
-let animLoading=0,animCache={key:'',frames:[]};
+/* Animación: una imagen por fotograma (toda la vista). El servidor de EUMETSAT tarda 3–17 s por imagen,
+   así que: se precargan en segundo plano al abrir el mapa, se piden todas a la vez, la animación arranca con
+   las que ya hay, y el navegador las guarda (caché de 7 días), así que al volver solo se piden las nuevas. */
+let animLoading=0,satPre=null;
 function setSatTime(x){const tl=$('sattime');if(tl)tl.textContent=x;}
+function satPrep(){
+  if(!satMap)return null;
+  const times=satTimes(3,1200e3),P=L.CRS.EPSG3857,bd0=satMap.getBounds(),sz=satMap.getSize();
+  const g=2e4,sw=P.project(bd0.getSouthWest()),ne=P.project(bd0.getNorthEast());
+  const x0=Math.floor(sw.x/g)*g,y0=Math.floor(sw.y/g)*g,x1=Math.ceil(ne.x/g)*g,y1=Math.ceil(ne.y/g)*g;
+  const k=Math.min(2,900/Math.max(sz.x,sz.y)),w=Math.round(sz.x*k),h=Math.round(w*(y1-y0)/(x1-x0));
+  const key=[x0,y0,x1,y1,w,times[0]].join(',');
+  if(satPre&&satPre.key===key)return satPre;
+  if(satPre&&!animTimer)satPre.frames.forEach(f=>f&&URL.revokeObjectURL(f.url));
+  const bd=L.latLngBounds(P.unproject(L.point(x0,y0)),P.unproject(L.point(x1,y1)));
+  const S={key,bd,times,frames:new Array(times.length),done:0};
+  times.forEach(async(ms,i)=>{
+    const u='https://view.eumetsat.int/geoserver/wms?service=WMS&request=GetMap&version=1.3.0&layers=mtg_fd:ir105_hrfi&styles=&format=image/png&transparent=true&crs=EPSG:3857&width='+w+'&height='+h+'&bbox='+[x0,y0,x1,y1].join(',')+'&time='+new Date(ms).toISOString().replace('.000Z','Z');
+    try{const r=await fetch(u);if(!r.ok)throw 0;const bl=await r.blob();if(!/image/.test(bl.type)||bl.size<500)throw 0;S.frames[i]={ms,url:URL.createObjectURL(bl)};}
+    catch(e){}finally{S.done++;}});
+  satPre=S;return S;}
 function stopAnim(){animLoading=0;if(animTimer){clearInterval(animTimer);animTimer=null;}
-  animLayers.forEach(l=>satMap&&satMap.removeLayer(l));animLayers=[];
+  animLayers.forEach(l=>l&&satMap&&satMap.removeLayer(l));animLayers=[];
   if(baseCloud)baseCloud.setOpacity(1);
   const b=$('satplay');if(b)b.textContent=t('▶ Ver últimas 3 horas');
   setSatTime(t('Última imagen disponible · se comprueba cada 3 min'));}
-async function toggleAnim(){
-  if(!satMap)return;if(animTimer||animLoading){stopAnim();return;}
-  const times=satTimes(3,1200e3);
-  const bd=satMap.getBounds(),P=L.CRS.EPSG3857,sw=P.project(bd.getSouthWest()),ne=P.project(bd.getNorthEast()),sz=satMap.getSize();
-  const k=Math.min(2,1024/Math.max(sz.x,sz.y)),w=Math.round(sz.x*k),h=Math.round(sz.y*k);
-  const bbox=[sw.x,sw.y,ne.x,ne.y].map(v=>Math.round(v)).join(',');
-  const key=bbox+'|'+times[0];
-  const run=++animLoading;const b=$('satplay');if(b)b.textContent=t('⏸ Parar');
-  let frames;
-  if(animCache.key===key&&animCache.frames.length)frames=animCache.frames;
-  else{
-    animCache.frames.forEach(f=>URL.revokeObjectURL(f.url));animCache={key:'',frames:[]};
-    let done=0;setSatTime(t('Cargando imágenes {n}/{m}…',{n:0,m:times.length}));
-    const one=async ms=>{const u='https://view.eumetsat.int/geoserver/wms?service=WMS&request=GetMap&version=1.3.0&layers=mtg_fd:ir105_hrfi&styles=&format=image/png&transparent=true&crs=EPSG:3857&width='+w+'&height='+h+'&bbox='+bbox+'&time='+new Date(ms).toISOString().replace('.000Z','Z');
-      try{const r=await fetch(u);if(!r.ok)throw 0;const bl=await r.blob();if(!/image/.test(bl.type)||bl.size<500)throw 0;return {ms,url:URL.createObjectURL(bl)};}
-      catch(e){return null;}finally{done++;if(run===animLoading)setSatTime(t('Cargando imágenes {n}/{m}…',{n:done,m:times.length}));}};
-    const res=new Array(times.length);let next=0;
-    await Promise.all(Array.from({length:5},async()=>{while(next<times.length){const i=next++;res[i]=await one(times[i]);}}));
-    frames=res.filter(Boolean);
-    if(run!==animLoading){frames.forEach(f=>URL.revokeObjectURL(f.url));return;}
-    animCache={key,frames};
-  }
-  if(frames.length<2){stopAnim();setSatTime(t('No se pudieron cargar las imágenes. Prueba más tarde.'));return;}
-  animLayers=frames.map(f=>L.imageOverlay(f.url,bd,{opacity:0,interactive:false,pane:'nubes'}).addTo(satMap));
-  if(baseCloud)baseCloud.setOpacity(0);
-  let i=0,hold=0;
-  const show=()=>{animLayers.forEach((l,j)=>l.setOpacity(j===i?1:0));setSatTime(satLabel(frames[i].ms));};
-  show();animLoading=0;
-  animTimer=setInterval(()=>{if(i===frames.length-1&&hold<4){hold++;return;}hold=0;i=(i+1)%frames.length;show();},500);
+function toggleAnim(){
+  if(!satMap)return;if(animTimer){stopAnim();return;}
+  const S=satPrep();if(!S)return;const n=S.times.length;
+  const b=$('satplay');if(b)b.textContent=t('⏸ Parar');
+  animLayers=new Array(n);let i=-1,hold=0;
+  const tick=()=>{
+    const av=[];S.frames.forEach((f,k)=>{if(f)av.push(k);});
+    const loading=S.done<n?' · '+t('Cargando imágenes {n}/{m}…',{n:av.length,m:n}):'';
+    if(S.done===n&&av.length<2){stopAnim();setSatTime(t('No se pudieron cargar las imágenes. Prueba más tarde.'));return;}
+    if(!av.length){setSatTime(t('Cargando imágenes {n}/{m}…',{n:0,m:n}));return;}
+    if(i===av[av.length-1]&&hold<4){hold++;return;}hold=0;
+    const nx=av.find(k=>k>i);i=nx===undefined?av[0]:nx;
+    if(!animLayers[i])animLayers[i]=L.imageOverlay(S.frames[i].url,S.bd,{opacity:0,interactive:false,pane:'nubes'}).addTo(satMap);
+    if(baseCloud)baseCloud.setOpacity(0);
+    animLayers.forEach((l,k)=>l&&l.setOpacity(k===i?1:0));
+    setSatTime(satLabel(S.frames[i].ms)+loading);};
+  animTimer=setInterval(tick,500);tick();
 }
 function drawSatMap(){
   animLoading=0;if(animTimer){clearInterval(animTimer);animTimer=null;}animLayers=[];
@@ -471,6 +477,7 @@ function drawSatMap(){
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{maxZoom:16,pane:'etiq'}).addTo(satMap);
   L.circleMarker([place.lat,place.lng],{radius:7,color:'#fff',weight:2,fillColor:'#ff6b57',fillOpacity:1}).addTo(satMap);
   L.control.zoom({position:'bottomright'}).addTo(satMap);
+  setTimeout(()=>{if(satMap&&!animTimer)satPrep();},1500);
 }
 let map=null,marker=null,favLayer=null;
 function initMap(){
