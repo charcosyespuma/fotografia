@@ -1,8 +1,9 @@
 name: Aviso de buena noche
 on:
   schedule:
-    - cron: '0 8 * * *'    # mañana: atardecer y tormentas del día
-    - cron: '0 17 * * *'   # tarde: noche, amanecer de mañana y tormentas
+    - cron: '0 8 * * *'                # mañana: resumen (noche, atardecer y tormentas del día)
+    - cron: '0 17 * * *'               # tarde: resumen (noche, amanecer de mañana y tormentas)
+    - cron: '0 10,12,14,19,21,23 * * *' # vigilar: solo si aparece algo nuevo, mejora o empeora
   workflow_dispatch:
 jobs:
   aviso:
@@ -14,6 +15,6 @@ jobs:
           node-version: 24
       - run: node aviso.mjs
         env:
-          MOMENTO: ${{ github.event_name == 'workflow_dispatch' && 'todo' || '' }}
+          MOMENTO: ${{ github.event_name == 'workflow_dispatch' && 'todo' || github.event.schedule == '0 8 * * *' && 'manana' || github.event.schedule == '0 17 * * *' && 'tarde' || 'vigilar' }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
