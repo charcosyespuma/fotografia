@@ -94,6 +94,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .hours div.best{opacity:1;box-shadow:0 0 0 2px rgba(255,255,255,.5)}
 .hourbox{margin:16px 0 4px;text-align:left}
 .hourbox .hours{height:56px}
+.sunrow{margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,.08)}
 .hl{display:flex;gap:3px;color:var(--mute);font-size:11px;margin-top:6px}
 .hl span{flex:1;min-width:5px;text-align:center;white-space:nowrap;overflow:visible;display:flex;justify-content:center}
 .hl span:first-child{justify-content:flex-start}.hl span:last-child{justify-content:flex-end}
@@ -238,7 +239,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="sub" data-i18n>🛰️ Satélites que se calculan</div>
     <div id="satlist"></div>
     <div class="addsat"><input id="norad" inputmode="numeric" data-i18n-ph placeholder="Nº NORAD (ej. 25544)"><button id="addsat" data-i18n>Añadir</button></div>
-    <div class="note" style="margin-top:12px">Versión 2026-11-16a · idiomas · animación de nubes · cuentas · atardeceres y tormentas<br><span data-i18n>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).</span><br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
+    <div class="note" style="margin-top:12px">Versión 2026-11-16b · idiomas · animación de nubes · cuentas · atardeceres y tormentas<br><span data-i18n>Puntuación: nubes (bajas, medias y altas), lluvia, humedad y niebla, calima (polvo y aerosoles de Copernicus CAMS, 5 días), viento, visibilidad, Luna y crepúsculo, por cada hora con el Sol bajo −12°. La noche se valora por su mejor tramo de la duración elegida (2 h, 4 h, 6 h o toda la noche).</span><br>Datos: <a href="https://open-meteo.com">Open-Meteo</a> · nubes © <a href="https://view.eumetsat.int">EUMETSAT</a> · búsqueda © OpenStreetMap · <a href="https://celestrak.org">CelesTrak</a> · mapa © Esri · nombres de lugares © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</div>
   </section>
 
   <section class="card hidden" id="auth">
@@ -636,7 +637,15 @@ const tr=(...a)=>t(...a);
 const favCache={};
 async function favNights(f){const k=f.lat+','+f.lng+','+mode+','+ventana+','+umbral,c=favCache[k];
   if(c&&Date.now()-c.t<30*60e3)return c;
-  const {wx:w,aqIdx:a}=await getForecast(f);return favCache[k]={t:Date.now(),n:nightsFor(f,w,a,mode,ventana,umbral),off:w.utc_offset_seconds};}
+  const {wx:w,aqIdx:a}=await getForecast(f);return favCache[k]={t:Date.now(),n:nightsFor(f,w,a,mode,ventana,umbral),off:w.utc_offset_seconds,w};}
+/* Próximo atardecer y próximo amanecer de un sitio, con su nota de color */
+async function favGlow(f,r){
+  const w=r.w,off=w.utc_offset_seconds,now=Date.now(),day=d=>new Date(now+off*1000+d*864e5).toISOString().slice(0,10);
+  const evs=[-1,0,1].map(d=>sunEvents(f,day(d),off));
+  const set=[evs[1].set,evs[2].set].find(e=>e.sun&&e.sun>now),rise=[evs[0].rise,evs[1].rise].find(e=>e.sun&&e.sun>now);
+  if(!r.hz)r.hz=await getHorizonPts(f,evs[1].set.az,evs[1].rise.az);
+  const g=(e,wh)=>e?{ms:e.sun,g:glowFromHourly(w.hourly,r.hz?r.hz[wh]:null,e.sun,wh,w.elevation)}:null;
+  return{set:g(set,'set'),rise:g(rise,'rise')};}
 async function fillFavCard(){
   const el=$('favcard');if(!el)return;
   el.innerHTML='<h3>'+t('⭐ Tus sitios')+'</h3>'+favs.map((f,i)=>`<div class="row" data-fi="${i}" style="cursor:pointer"><div class="tx"><b>${esc(f.name)}</b><span id="fv${i}">${t('calculando…')}</span></div><span class="badge n" id="fb${i}">…</span></div>`).join('');
@@ -644,7 +653,10 @@ async function fillFavCard(){
   favs.forEach(async(f,i)=>{try{const r=await favNights(f),t=r.n[0];if(!t)throw 0;
       const wd=k=>new Date(k+'T12:00:00Z').toLocaleDateString(LOCALE(),{weekday:'short',timeZone:'UTC'}).replace('.','');
       const next=r.n.slice(1,4).map(x=>`<span class="nx"><b style="color:${col(x.best)}">${x.best}</b><small>${wd(x.key)}</small></span>`).join('');
-      $('fv'+i).innerHTML=`${tr('Hoy {a}–{b}',{a:fmtHO(t.start,r.off),b:fmtHO(t.end,r.off)})}<span class="nxrow">${next}</span>`;
+      $('fv'+i).innerHTML=`${tr('Hoy {a}–{b}',{a:fmtHO(t.start,r.off),b:fmtHO(t.end,r.off)})}<span class="nxrow">${next}</span><span class="nxrow sunrow" id="fs${i}"></span>`;
+      favGlow(f,r).then(gl=>{const el=$('fs'+i);if(!el)return;
+        const one=(x,ic)=>x&&x.g?`<span class="nx"><b style="color:${col(x.g.score)}">${ic} ${x.g.score}</b><small>${fmtHO(x.ms,r.off)}</small></span>`:'';
+        el.innerHTML=one(gl.set,'🌅')+one(gl.rise,'🌄');}).catch(()=>{});
       const b=$('fb'+i);b.textContent=t.best;b.className='badge';b.style.background='rgba(0,0,0,.25)';b.style.color=col(t.best);
     }catch(_){const v=$('fv'+i);if(v)v.textContent=tr('sin datos');}});
 }
@@ -1028,9 +1040,6 @@ function render(){
       <div class="dn">${dayLabel(x.key,i)}</div><div class="em">${dayEmoji(x)}</div>
       <div class="sc" style="color:${col(x.best)}">${x.best}</div><div class="bar" style="background:${col(x.best)}"></div></button>`).join('')}</div>
 
-  ${favs.length?'<section class="card" id="favcard"></section>':''}
-
-
   ${sunCard(n)}
   ${stormCard()}
 
@@ -1040,6 +1049,8 @@ function render(){
     <div class="satctl"><button id="satplay"></button><span id="sattime" class="note"></span></div>
     <div class="note" style="margin-top:8px">${t('Infrarrojo de Meteosat (EUMETSAT): una imagen cada 10 min, publicada con 15–30 min de retraso; funciona de noche. Las nubes se ven blancas o grises; cuanto más blancas, más frías y altas. 🔴 = tu sitio.')}</div>
   </section>
+
+  ${favs.length?'<section class="card" id="favcard"></section>':''}
 
   <section class="card">
     <h3>${t('Vía Láctea')}</h3>
