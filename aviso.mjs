@@ -225,6 +225,20 @@ async function candidatos(pl,cfg,stormHours){
     text:`${pl.name}: ${t(st.level>=3?'tormenta fuerte (posible granizo)':'tormenta prevista')} ${fh(st.start)}–${fh(st.end)}`});
   return out;
 }
+/* Envío a ntfy con reintentos: los servidores de GitHub comparten IP con mucha gente y ntfy.sh
+   a veces responde 429 (demasiadas peticiones). Si existe el secreto NTFY_TOKEN, se usa tu cuenta
+   de ntfy y el límite pasa a ser solo tuyo. */
+const NTFY_TOKEN=process.env.NTFY_TOKEN||'';
+async function enviarNtfy(body){
+  const h={'Content-Type':'application/json'};if(NTFY_TOKEN)h.Authorization='Bearer '+NTFY_TOKEN;
+  let r;
+  for(let k=0;k<6;k++){
+    r=await fetch('https://ntfy.sh/',{method:'POST',headers:h,body:JSON.stringify(body)});
+    if(r.status!==429&&r.status<500)return r;
+    const ra=+r.headers.get('retry-after')||0,w=Math.max(ra,[10,20,30,45,60,60][k]);
+    console.log(`ntfy respondió ${r.status}; reintento en ${w} s`);await new Promise(x=>setTimeout(x,w*1000));
+  }
+  return r;}
 const NOMBRE={noche:'la noche',atardecer:'el atardecer',amanecer:'el amanecer'};
 function tituloDe(it){return it.icon==='⚡'?t('⚡ Tormenta en {s}',{s:it.site}):it.icon==='✨'?t('✨ Buena noche en {s} ({b}/100)',{s:it.site,b:it.score}):it.icon==='🌅'?t('🌅 Buen atardecer en {s} ({b}/100)',{s:it.site,b:it.score}):t('🌄 Buen amanecer en {s} ({b}/100)',{s:it.site,b:it.score});}
 
@@ -269,8 +283,7 @@ async function procesar(u){
   else{title=t('🔭 Mañana pinta bien en {s}',{s:manana[0].replace(/ \d+$/,'')});tags=['telescope'];}
   let message=items.map(i=>(i.text.startsWith('📈')?'':i.icon+' ')+i.text).concat(peores).join('\n');
   if(manana.length)message+=(message?'\n':'')+t('🔭 Noche de mañana: {x}',{x:manana.join(', ')});
-  const r=await fetch('https://ntfy.sh/',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({topic:cfg.topic,title,message,tags,priority,click:cfg.app||undefined})});
+  const r=await enviarNtfy({topic:cfg.topic,title,message,tags,priority,click:cfg.app||undefined});
   if(r.ok)await guardar();
   return `aviso enviado (${r.status}): ${title}`;
 }
