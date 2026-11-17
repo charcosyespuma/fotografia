@@ -3,7 +3,7 @@ on:
   schedule:
     - cron: '0 8 * * *'                # mañana: resumen (noche, atardecer y tormentas del día)
     - cron: '0 17 * * *'               # tarde: resumen (noche, amanecer de mañana y tormentas)
-    - cron: '0 10,12,14,19,21,23 * * *' # vigilar: solo si aparece algo nuevo, mejora o empeora
+    - cron: '0 10,12,14,15,16,18,19,21,23 * * *' # vigilar: novedades, cambios y recordatorio de atardecer
   workflow_dispatch:
 jobs:
   aviso:
